@@ -32,20 +32,30 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
     setSelectedIds,
     updateItem,
     clearSelection,
+    gridVisible,
+    zoomLevel,
+    checkOverflow,
+    hasOverflow,
   } = useEditorStore();
 
   // Calculate board dimensions in pixels at 300 DPI
   const boardPxWidth = inchesToPx(boardSize.width, dpi);
   const boardPxHeight = inchesToPx(boardSize.height, dpi);
 
-  // Calculate scale to fit board in container with padding
+  // Calculate scale to fit board in container with padding, adjusted by zoom level
   useEffect(() => {
     const padding = 40;
     const scaleX = (containerWidth - padding * 2) / boardPxWidth;
     const scaleY = (containerHeight - padding * 2) / boardPxHeight;
-    const newScale = Math.min(scaleX, scaleY, 1);
+    const baseScale = Math.min(scaleX, scaleY, 1);
+    const newScale = baseScale * zoomLevel;
     setDisplayScale(Math.max(0.01, newScale));
-  }, [containerWidth, containerHeight, boardPxWidth, boardPxHeight, setDisplayScale]);
+  }, [containerWidth, containerHeight, boardPxWidth, boardPxHeight, setDisplayScale, zoomLevel]);
+
+  // Check for overflow when items change
+  useEffect(() => {
+    checkOverflow();
+  }, [items, checkOverflow]);
 
   // Displayed dimensions
   const displayWidth = boardPxWidth * displayScale;
@@ -210,16 +220,16 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
 
       {/* Grid Layer */}
       <Layer name="gridLayer">
-        {gridLines}
-        {/* Border */}
+        {gridVisible && gridLines}
+        {/* Border - always visible */}
         <Rect
           name="grid"
           x={0}
           y={0}
           width={displayWidth}
           height={displayHeight}
-          stroke="#999"
-          strokeWidth={1}
+          stroke={hasOverflow ? "#ef4444" : "#999"}
+          strokeWidth={hasOverflow ? 3 : 1}
           listening={false}
         />
       </Layer>

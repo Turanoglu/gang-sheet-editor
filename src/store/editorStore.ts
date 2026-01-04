@@ -31,6 +31,12 @@ const initialState: EditorState = {
   autoFillSettings: DEFAULT_AUTO_FILL_SETTINGS,
   history: [],
   historyIndex: -1,
+  // UI state
+  gridVisible: true,
+  zoomLevel: 1.0,
+  marginInches: 0.125,
+  itemQuantities: {},
+  hasOverflow: false,
 };
 
 const MAX_HISTORY_SIZE = 50;
@@ -377,5 +383,235 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
   getBoardPxHeight: () => {
     const { boardSize, dpi } = get();
     return inchesToPx(boardSize.height, dpi);
+  },
+
+  // UI State
+  toggleGrid: () => {
+    set((state) => ({ gridVisible: !state.gridVisible }));
+  },
+
+  setZoomLevel: (level: number) => {
+    set({ zoomLevel: Math.max(0.1, Math.min(2.0, level)) });
+  },
+
+  zoomIn: () => {
+    set((state) => ({ zoomLevel: Math.min(2.0, state.zoomLevel + 0.1) }));
+  },
+
+  zoomOut: () => {
+    set((state) => ({ zoomLevel: Math.max(0.1, state.zoomLevel - 0.1) }));
+  },
+
+  setMarginInches: (margin: number) => {
+    set({ marginInches: Math.max(0, margin) });
+    set((state) => ({
+      autoFillSettings: {
+        ...state.autoFillSettings,
+        spacingPx: inchesToPx(margin),
+      },
+    }));
+  },
+
+  // Quantity
+  setItemQuantity: (assetId: string, quantity: number) => {
+    set((state) => ({
+      itemQuantities: {
+        ...state.itemQuantities,
+        [assetId]: Math.max(1, quantity),
+      },
+    }));
+  },
+
+  applyQuantities: () => {
+    const { items, itemQuantities, assets, getBoardPxWidth, getBoardPxHeight } = get();
+    
+    get().pushToHistory();
+    
+    const boardWidth = getBoardPxWidth();
+    const boardHeight = getBoardPxHeight();
+    const newItems: CanvasItem[] = [];
+    const maxZIndex = Math.max(...items.map((i) => i.zIndex), 0);
+    let zIndexCounter = maxZIndex + 1;
+
+    // Get unique asset items (one per asset)
+    const assetItems = new Map<string, CanvasItem>();
+    items.forEach((item) => {
+      if (!assetItems.has(item.assetId)) {
+        assetItems.set(item.assetId, item);
+      }
+    });
+
+    // Remove all items and recreate based on quantities
+    const finalItems: CanvasItem[] = [];
+    
+    assetItems.forEach((templateItem, assetId) => {
+      const quantity = itemQuantities[assetId] || 1;
+      const offset = inchesToPx(0.25);
+      
+      for (let i = 0; i < quantity; i++) {
+        if (i === 0) {
+          // Keep original item
+          finalItems.push(templateItem);
+        } else {
+          // Create duplicates
+          let newX = templateItem.x + (i % 5) * (templateItem.width + offset);
+          let newY = templateItem.y + Math.floor(i / 5) * (templateItem.height + offset);
+
+          // Clamp to board bounds
+          if (newX + templateItem.width > boardWidth) {
+            newX = offset;
+            newY += templateItem.height + offset;
+          }
+          if (newY + templateItem.height > boardHeight) {
+            newY = offset;
+          }
+
+          const newItem: CanvasItem = {
+            ...templateItem,
+            id: uuidv4(),
+            x: newX,
+            y: newY,
+            zIndex: zIndexCounter++,
+          };
+          finalItems.push(newItem);
+        }
+      }
+    });
+
+    set({ items: finalItems });
+  },
+
+  // Alignment
+  alignItems: (direction: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => {
+    const { items, selectedIds, getBoardPxWidth, getBoardPxHeight } = get();
+    if (selectedIds.length === 0) return;
+
+    get().pushToHistory();
+
+    const selectedItems = items.filter((item) => selectedIds.includes(item.id));
+    const boardWidth = getBoardPxWidth();
+    const boardHeight = getBoardPxHeight();
+
+    // Find bounding box of selection
+    const minX = Math.min(...selectedItems.map((i) => i.x));
+    const maxX = Math.max(...selectedItems.map((i) => i.x + i.width));
+    const minY = Math.min(...selectedItems.map((i) => i.y));
+    const maxY = Math.max(...selectedItems.map((i) => i.y + i.height));
+    const selectionWidth = maxX - minX;
+    const selectionHeight = maxY - minY;
+
+    let offsetX = 0;
+    let offsetY = 0;
+
+    switch (direction) {
+      case 'left':
+        offsetX = -minX;
+        break;
+      case 'center':
+        offsetX = (boardWidth - selectionWidth) / 2 - minX;
+        break;
+      case 'right':
+        offsetX = boardWidth - maxX;
+        break;
+      case 'top':
+        offsetY = -minY;
+        break;
+      case 'middle':
+        offsetY = (boardHeight - selectionHeight) / 2 - minY;
+        break;
+      case 'bottom':
+        offsetY = boardHeight - maxY;
+        break;
+    }
+
+    set((state) => ({
+      items: state.items.map((item) => {
+        if (selectedIds.includes(item.id)) {
+          return {
+            ...item,
+            x: item.x + offsetX,
+            y: item.y + offsetY,
+          };
+        }
+        return item;
+      }),
+    }));
+  },
+
+  // Overflow check
+  checkOverflow: () => {
+    const { items, getBoardPxWidth, getBoardPxHeight } = get();
+    const boardWidth = getBoardPxWidth();
+    const boardHeight = getBoardPxHeight();
+
+    const hasOverflow = items.some((item) => {
+      // Account for rotation (simplified - just check basic bounds)
+      const rad = (item.rotation * Math.PI) / 180;
+      const cos = Math.abs(Math.cos(rad));
+      const sin = Math.abs(Math.sin(rad));
+      const rotatedWidth = item.width * cos + item.height * sin;
+      const rotatedHeight = item.width * sin + item.height * cos;
+
+      return (
+        item.x < 0 ||
+        item.y < 0 ||
+        item.x + rotatedWidth > boardWidth ||
+        item.y + rotatedHeight > boardHeight
+      );
+    });
+
+    set({ hasOverflow });
+    return hasOverflow;
+  },
+
+  setHasOverflow: (hasOverflow: boolean) => {
+    set({ hasOverflow });
+  },
+
+  // Position control - Move selected items to top of board
+  moveToTop: () => {
+    const { items, selectedIds } = get();
+    if (selectedIds.length === 0) return;
+
+    get().pushToHistory();
+
+    set((state) => ({
+      items: state.items.map((item) => {
+        if (selectedIds.includes(item.id)) {
+          return {
+            ...item,
+            y: 0, // Move to top edge
+          };
+        }
+        return item;
+      }),
+    }));
+  },
+
+  // Position control - Move selected items to bottom of board
+  moveToBottom: () => {
+    const { items, selectedIds, getBoardPxHeight } = get();
+    if (selectedIds.length === 0) return;
+
+    get().pushToHistory();
+    const boardHeight = getBoardPxHeight();
+
+    set((state) => ({
+      items: state.items.map((item) => {
+        if (selectedIds.includes(item.id)) {
+          // Account for rotation when calculating height
+          const rad = (item.rotation * Math.PI) / 180;
+          const cos = Math.abs(Math.cos(rad));
+          const sin = Math.abs(Math.sin(rad));
+          const rotatedHeight = item.width * sin + item.height * cos;
+          
+          return {
+            ...item,
+            y: boardHeight - rotatedHeight, // Move to bottom edge
+          };
+        }
+        return item;
+      }),
+    }));
   },
 }));

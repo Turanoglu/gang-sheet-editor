@@ -29,6 +29,27 @@ export function pxToInches(px: number, dpi: number = DEFAULT_DPI): number {
   return px / dpi;
 }
 
+// Calculate effective resolution (DPI) based on original pixels and display inches
+export function calculateResolution(originalPx: number, displayInches: number): number {
+  if (displayInches <= 0) return 0;
+  return Math.round(originalPx / displayInches);
+}
+
+// Get resolution quality label and color
+export function getResolutionQuality(dpi: number): { label: string; color: string; textColor: string } {
+  if (dpi >= 300) {
+    return { label: 'Excellent', color: 'bg-green-100', textColor: 'text-green-700' };
+  } else if (dpi >= 200) {
+    return { label: 'Good', color: 'bg-blue-100', textColor: 'text-blue-700' };
+  } else if (dpi >= 150) {
+    return { label: 'Fair', color: 'bg-yellow-100', textColor: 'text-yellow-700' };
+  } else if (dpi >= 100) {
+    return { label: 'Low', color: 'bg-orange-100', textColor: 'text-orange-700' };
+  } else {
+    return { label: 'Poor', color: 'bg-red-100', textColor: 'text-red-700' };
+  }
+}
+
 // Asset stored in cache
 export interface Asset {
   id: string;
@@ -70,6 +91,12 @@ export interface AutoFillSettings {
   alternateRowOffset: boolean; // Brick pattern
 }
 
+// Item quantity for duplicating multiple copies
+export interface ItemQuantity {
+  assetId: string;
+  quantity: number;
+}
+
 // Editor state
 export interface EditorState {
   // Board settings
@@ -91,6 +118,17 @@ export interface EditorState {
   // History for undo/redo
   history: CanvasItem[][];
   historyIndex: number;
+
+  // UI state
+  gridVisible: boolean;
+  zoomLevel: number; // 0.1 to 2.0 (10% to 200%)
+  marginInches: number; // Margin between items in inches
+  
+  // Quantity for each asset
+  itemQuantities: Record<string, number>;
+  
+  // Overflow warning
+  hasOverflow: boolean;
 }
 
 // Actions
@@ -130,6 +168,28 @@ export interface EditorActions {
   // Board dimensions helpers
   getBoardPxWidth: () => number;
   getBoardPxHeight: () => number;
+
+  // UI State
+  toggleGrid: () => void;
+  setZoomLevel: (level: number) => void;
+  zoomIn: () => void;
+  zoomOut: () => void;
+  setMarginInches: (margin: number) => void;
+  
+  // Quantity
+  setItemQuantity: (assetId: string, quantity: number) => void;
+  applyQuantities: () => void;
+  
+  // Alignment
+  alignItems: (direction: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void;
+  
+  // Overflow check
+  checkOverflow: () => boolean;
+  setHasOverflow: (hasOverflow: boolean) => void;
+  
+  // Position control - move to board edges
+  moveToTop: () => void;
+  moveToBottom: () => void;
 }
 
 export type EditorStore = EditorState & EditorActions;

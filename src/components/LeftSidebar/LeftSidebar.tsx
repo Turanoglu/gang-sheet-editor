@@ -1,12 +1,13 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useEditorStore } from '../../store/editorStore';
 import { loadImageFile } from '../../utils/export';
-import { inchesToPx, pxToInches } from '../../types';
+import { inchesToPx, pxToInches, calculateResolution, getResolutionQuality } from '../../types';
 import type { Asset, CanvasItem } from '../../types';
 
 export const LeftSidebar: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   
   const {
     assets,
@@ -20,6 +21,10 @@ export const LeftSidebar: React.FC = () => {
     removeSelectedItems,
     autoFillSheet,
     dpi,
+    itemQuantities,
+    setItemQuantity,
+    applyQuantities,
+    removeAsset,
   } = useEditorStore();
 
   // Get selected item
@@ -106,6 +111,92 @@ export const LeftSidebar: React.FC = () => {
     [addAsset, addItem, dpi, items]
   );
 
+  // Handle drag and drop
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      if (!file.type.startsWith('image/')) {
+        alert(`File ${file.name} is not an image`);
+        continue;
+      }
+
+      try {
+        const { dataUrl, imageEl, width, height } = await loadImageFile(file);
+
+        const assetId = uuidv4();
+
+        const asset: Asset = {
+          id: assetId,
+          name: file.name,
+          originalWidth: width,
+          originalHeight: height,
+          imageEl,
+          dataUrl,
+        };
+
+        addAsset(asset);
+
+        const maxInitialWidth = inchesToPx(6, dpi);
+        const maxInitialHeight = inchesToPx(6, dpi);
+
+        let itemWidth = width;
+        let itemHeight = height;
+
+        if (itemWidth > maxInitialWidth) {
+          const scale = maxInitialWidth / itemWidth;
+          itemWidth = maxInitialWidth;
+          itemHeight = itemHeight * scale;
+        }
+
+        if (itemHeight > maxInitialHeight) {
+          const scale = maxInitialHeight / itemHeight;
+          itemHeight = maxInitialHeight;
+          itemWidth = itemWidth * scale;
+        }
+
+        const canvasItem: CanvasItem = {
+          id: uuidv4(),
+          assetId,
+          x: inchesToPx(0.5, dpi),
+          y: inchesToPx(0.5, dpi) + i * inchesToPx(0.25, dpi),
+          width: itemWidth,
+          height: itemHeight,
+          rotation: 0,
+          lockedAspect: true,
+          opacity: 1,
+          flipX: false,
+          flipY: false,
+          zIndex: Math.max(...items.map((item) => item.zIndex), 0) + 1 + i,
+        };
+
+        addItem(canvasItem);
+      } catch (error) {
+        console.error(`Failed to load ${file.name}:`, error);
+        alert(`Failed to load ${file.name}`);
+      }
+    }
+  }, [addAsset, addItem, dpi, items]);
+
   // Handle width change
   const handleWidthChange = (value: string) => {
     if (!selectedItem) return;
@@ -165,8 +256,14 @@ export const LeftSidebar: React.FC = () => {
       <div className="p-4 border-b border-gray-100">
         <div
           onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center 
-                     hover:border-blue-400 hover:bg-blue-50/50 cursor-pointer transition-all group"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all group
+            ${isDragOver 
+              ? 'border-blue-500 bg-blue-100 scale-105' 
+              : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/50'
+            }`}
         >
           <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-gray-100 group-hover:bg-blue-100 
                           flex items-center justify-center transition-colors">
@@ -222,12 +319,8 @@ export const LeftSidebar: React.FC = () => {
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      // Remove all items with this asset
-                      const itemsToRemove = items.filter(i => i.assetId === asset.id);
-                      itemsToRemove.forEach(item => {
-                        setSelectedIds([item.id]);
-                        removeSelectedItems();
-                      });
+                      // Remove asset and all related items
+                      removeAsset(asset.id);
                     }}
                     className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 
                                text-white rounded-full text-xs flex items-center justify-center 
@@ -323,18 +416,88 @@ export const LeftSidebar: React.FC = () => {
                 </button>
               </div>
             </div>
+
+            {/* Resolution */}
+            {(() => {
+              const selectedAssetData = assets[selectedItem.assetId];
+              if (!selectedAssetData) return null;
+              
+              const widthInches = pxToInches(selectedItem.width, dpi);
+              const heightInches = pxToInches(selectedItem.height, dpi);
+              const resolutionW = calculateResolution(selectedAssetData.originalWidth, widthInches);
+              const resolutionH = calculateResolution(selectedAssetData.originalHeight, heightInches);
+              const avgResolution = Math.round((resolutionW + resolutionH) / 2);
+              const quality = getResolutionQuality(avgResolution);
+
+              return (
+                <div className="mt-3 p-3 bg-white rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-gray-600">Resolution:</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${quality.color} ${quality.textColor}`}>
+                      {quality.label}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-center gap-2">
+                    <span className={`text-2xl font-bold ${quality.textColor}`}>
+                      {avgResolution}
+                    </span>
+                    <span className="text-sm text-gray-500">DPI</span>
+                  </div>
+                  <div className="mt-2 text-[10px] text-gray-400 text-center">
+                    Original: {selectedAssetData.originalWidth} × {selectedAssetData.originalHeight}px
+                  </div>
+                  
+                  {/* Resolution Bar */}
+                  <div className="mt-2">
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full transition-all duration-300 ${
+                          avgResolution >= 300 ? 'bg-green-500' :
+                          avgResolution >= 200 ? 'bg-blue-500' :
+                          avgResolution >= 150 ? 'bg-yellow-500' :
+                          avgResolution >= 100 ? 'bg-orange-500' : 'bg-red-500'
+                        }`}
+                        style={{ width: `${Math.min(100, (avgResolution / 300) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between mt-1 text-[9px] text-gray-400">
+                      <span>Low</span>
+                      <span>300 DPI</span>
+                    </div>
+                  </div>
+                  
+                  {/* Warning if resolution is too low */}
+                  {avgResolution < 150 && (
+                    <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-[10px] text-red-600">
+                      ⚠️ Low resolution may result in blurry prints. Consider reducing the image size.
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Image Quantity */}
           <div>
             <label className="block text-xs font-medium text-gray-500 mb-1">Image Quantity:</label>
-            <input
-              type="number"
-              min="1"
-              defaultValue="1"
-              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm 
-                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min="1"
+                value={itemQuantities[selectedItem.assetId] || 1}
+                onChange={(e) => setItemQuantity(selectedItem.assetId, parseInt(e.target.value) || 1)}
+                className="flex-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm 
+                           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <button
+                onClick={applyQuantities}
+                className="px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg 
+                           text-xs font-medium transition-colors"
+                title="Apply quantity to create copies"
+              >
+                Apply
+              </button>
+            </div>
           </div>
 
           {/* Action Buttons */}

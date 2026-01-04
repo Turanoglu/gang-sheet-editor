@@ -103,6 +103,18 @@ const AutoBuildIcon = () => (
   </svg>
 );
 
+const MoveToTopIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3h14M12 7v14m0-14l-4 4m4-4l4 4" />
+  </svg>
+);
+
+const MoveToBottomIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 21h14M12 17V3m0 14l-4-4m4 4l4-4" />
+  </svg>
+);
+
 export const Toolbar: React.FC<ToolbarProps> = ({ stageRef, displayScale }) => {
   const {
     boardSize,
@@ -118,6 +130,16 @@ export const Toolbar: React.FC<ToolbarProps> = ({ stageRef, displayScale }) => {
     autoFillSheet,
     history,
     historyIndex,
+    gridVisible,
+    toggleGrid,
+    zoomIn,
+    zoomOut,
+    zoomLevel,
+    marginInches,
+    setMarginInches,
+    alignItems,
+    moveToTop,
+    moveToBottom,
   } = useEditorStore();
 
   // Get selected items
@@ -180,11 +202,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({ stageRef, displayScale }) => {
 
       {/* Margin Input */}
       <div className="flex items-center gap-2 pr-3 border-r border-gray-200">
+        <label className="text-xs text-gray-500">Margin:</label>
         <input
           type="number"
           step="0.125"
           min="0"
-          defaultValue="0.125"
+          value={marginInches}
+          onChange={(e) => setMarginInches(parseFloat(e.target.value) || 0)}
           className="w-16 px-2 py-1.5 bg-gray-100 rounded-lg border-0 text-sm text-center
                      focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
@@ -193,7 +217,12 @@ export const Toolbar: React.FC<ToolbarProps> = ({ stageRef, displayScale }) => {
 
       {/* Tool Buttons */}
       <div className="flex items-center gap-1 pr-3 border-r border-gray-200">
-        <ToolButton icon={<GridIcon />} title="Toggle Grid" />
+        <ToolButton 
+          icon={<GridIcon />} 
+          title="Toggle Grid" 
+          onClick={toggleGrid}
+          active={gridVisible}
+        />
         <ToolButton icon={<CopyIcon />} title="Duplicate" onClick={duplicateSelectedItems} disabled={!hasSelection} />
       </div>
 
@@ -211,9 +240,40 @@ export const Toolbar: React.FC<ToolbarProps> = ({ stageRef, displayScale }) => {
 
       {/* Alignment */}
       <div className="flex items-center gap-1 pr-3 border-r border-gray-200">
-        <ToolButton icon={<AlignLeftIcon />} title="Align Left" disabled={!hasSelection} />
-        <ToolButton icon={<AlignCenterIcon />} title="Align Center" disabled={!hasSelection} />
-        <ToolButton icon={<AlignRightIcon />} title="Align Right" disabled={!hasSelection} />
+        <ToolButton 
+          icon={<AlignLeftIcon />} 
+          title="Align Left" 
+          onClick={() => alignItems('left')}
+          disabled={!hasSelection} 
+        />
+        <ToolButton 
+          icon={<AlignCenterIcon />} 
+          title="Align Center" 
+          onClick={() => alignItems('center')}
+          disabled={!hasSelection} 
+        />
+        <ToolButton 
+          icon={<AlignRightIcon />} 
+          title="Align Right" 
+          onClick={() => alignItems('right')}
+          disabled={!hasSelection} 
+        />
+      </div>
+
+      {/* Move to Top/Bottom */}
+      <div className="flex items-center gap-1 pr-3 border-r border-gray-200">
+        <ToolButton 
+          icon={<MoveToTopIcon />} 
+          title="Move to Top" 
+          onClick={moveToTop}
+          disabled={!hasSelection} 
+        />
+        <ToolButton 
+          icon={<MoveToBottomIcon />} 
+          title="Move to Bottom" 
+          onClick={moveToBottom}
+          disabled={!hasSelection} 
+        />
       </div>
 
       {/* Delete */}
@@ -232,11 +292,11 @@ export const Toolbar: React.FC<ToolbarProps> = ({ stageRef, displayScale }) => {
 
       {/* Zoom */}
       <div className="flex items-center gap-2 pr-3 border-r border-gray-200">
-        <ToolButton icon={<ZoomOutIcon />} title="Zoom Out" />
+        <ToolButton icon={<ZoomOutIcon />} title="Zoom Out" onClick={zoomOut} />
         <span className="text-xs font-medium text-gray-600 min-w-[50px] text-center">
-          {Math.round(displayScale * 100)}%
+          {Math.round(zoomLevel * 100)}%
         </span>
-        <ToolButton icon={<ZoomInIcon />} title="Zoom In" />
+        <ToolButton icon={<ZoomInIcon />} title="Zoom In" onClick={zoomIn} />
       </div>
 
       {/* Auto Build & Export */}
@@ -274,9 +334,10 @@ interface ToolButtonProps {
   onClick?: () => void;
   disabled?: boolean;
   danger?: boolean;
+  active?: boolean;
 }
 
-const ToolButton: React.FC<ToolButtonProps> = ({ icon, title, onClick, disabled = false, danger = false }) => {
+const ToolButton: React.FC<ToolButtonProps> = ({ icon, title, onClick, disabled = false, danger = false, active = false }) => {
   return (
     <button
       onClick={onClick}
@@ -287,7 +348,9 @@ const ToolButton: React.FC<ToolButtonProps> = ({ icon, title, onClick, disabled 
           ? 'text-gray-300 cursor-not-allowed' 
           : danger
             ? 'text-gray-500 hover:text-red-500 hover:bg-red-50'
-            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+            : active
+              ? 'text-blue-500 bg-blue-50 hover:bg-blue-100'
+              : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
         }`}
     >
       {icon}

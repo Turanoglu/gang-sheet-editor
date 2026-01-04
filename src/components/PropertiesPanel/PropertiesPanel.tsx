@@ -1,8 +1,13 @@
-import React from 'react';
+import React, { useRef } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { useEditorStore } from '../../store/editorStore';
-import { pxToInches } from '../../types';
+import { pxToInches, inchesToPx } from '../../types';
+import type { Asset, CanvasItem } from '../../types';
+import { loadImageFile } from '../../utils/export';
 
 export const PropertiesPanel: React.FC = () => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const {
     items,
     selectedIds,
@@ -11,6 +16,9 @@ export const PropertiesPanel: React.FC = () => {
     dpi,
     duplicateSelectedItems,
     clearAllItems,
+    autoFillSheet,
+    addAsset,
+    addItem,
   } = useEditorStore();
 
   // Get selected item info
@@ -28,6 +36,80 @@ export const PropertiesPanel: React.FC = () => {
     asset,
     items: items.filter(item => item.assetId === asset.id),
   })).filter(group => group.items.length > 0);
+
+  // Handle file upload for "Add new design"
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      if (!file.type.startsWith('image/')) {
+        alert(`File ${file.name} is not an image`);
+        continue;
+      }
+
+      try {
+        const { dataUrl, imageEl, width, height } = await loadImageFile(file);
+
+        const assetId = uuidv4();
+
+        const asset: Asset = {
+          id: assetId,
+          name: file.name,
+          originalWidth: width,
+          originalHeight: height,
+          imageEl,
+          dataUrl,
+        };
+
+        addAsset(asset);
+
+        const maxInitialWidth = inchesToPx(6, dpi);
+        const maxInitialHeight = inchesToPx(6, dpi);
+
+        let itemWidth = width;
+        let itemHeight = height;
+
+        if (itemWidth > maxInitialWidth) {
+          const scale = maxInitialWidth / itemWidth;
+          itemWidth = maxInitialWidth;
+          itemHeight = itemHeight * scale;
+        }
+
+        if (itemHeight > maxInitialHeight) {
+          const scale = maxInitialHeight / itemHeight;
+          itemHeight = maxInitialHeight;
+          itemWidth = itemWidth * scale;
+        }
+
+        const canvasItem: CanvasItem = {
+          id: uuidv4(),
+          assetId,
+          x: inchesToPx(0.5, dpi),
+          y: inchesToPx(0.5, dpi) + i * inchesToPx(0.25, dpi),
+          width: itemWidth,
+          height: itemHeight,
+          rotation: 0,
+          lockedAspect: true,
+          opacity: 1,
+          flipX: false,
+          flipY: false,
+          zIndex: Math.max(...items.map((item) => item.zIndex), 0) + 1 + i,
+        };
+
+        addItem(canvasItem);
+      } catch (error) {
+        console.error(`Failed to load ${file.name}:`, error);
+        alert(`Failed to load ${file.name}`);
+      }
+    }
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <div className="w-80 bg-gray-50 border-l border-gray-200 flex flex-col h-full">
@@ -121,7 +203,18 @@ export const PropertiesPanel: React.FC = () => {
 
       {/* Quick Actions */}
       <div className="p-4 space-y-2">
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-600 
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleFileUpload}
+          className="hidden"
+        />
+        
+        <button 
+          onClick={() => fileInputRef.current?.click()}
+          className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-600 
                            hover:bg-white hover:shadow-sm rounded-lg transition-all group">
           <div className="w-8 h-8 bg-gray-100 group-hover:bg-blue-50 rounded-lg flex items-center justify-center transition-colors">
             <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -131,7 +224,12 @@ export const PropertiesPanel: React.FC = () => {
           <span>Add new design</span>
         </button>
 
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-600 
+        <button 
+          onClick={() => {
+            // For now, show a message that this feature is coming
+            alert('Previous designs feature coming soon! Your designs will be saved in browser storage.');
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-600 
                            hover:bg-white hover:shadow-sm rounded-lg transition-all group">
           <div className="w-8 h-8 bg-gray-100 group-hover:bg-blue-50 rounded-lg flex items-center justify-center transition-colors">
             <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -142,19 +240,33 @@ export const PropertiesPanel: React.FC = () => {
           <span>Open from previous designs</span>
         </button>
 
-        <button className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-600 
-                           hover:bg-white hover:shadow-sm rounded-lg transition-all group">
-          <div className="w-8 h-8 bg-gray-100 group-hover:bg-blue-50 rounded-lg flex items-center justify-center transition-colors">
-            <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button 
+          onClick={autoFillSheet}
+          disabled={selectedIds.length === 0}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm rounded-lg transition-all group
+            ${selectedIds.length === 0 
+              ? 'text-gray-400 cursor-not-allowed' 
+              : 'text-gray-600 hover:bg-white hover:shadow-sm'
+            }`}>
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors
+            ${selectedIds.length === 0 
+              ? 'bg-gray-100' 
+              : 'bg-gray-100 group-hover:bg-blue-50'
+            }`}>
+            <svg className={`w-4 h-4 ${selectedIds.length === 0 ? 'text-gray-300' : 'text-gray-400 group-hover:text-blue-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                     d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
             </svg>
           </div>
-          <span>Auto Build</span>
+          <span>Auto Build {selectedIds.length === 0 && '(select an image)'}</span>
         </button>
 
         <button 
-          onClick={clearAllItems}
+          onClick={() => {
+            if (window.confirm('Are you sure you want to clear all items and start over?')) {
+              clearAllItems();
+            }
+          }}
           className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-600 
                            hover:bg-white hover:shadow-sm rounded-lg transition-all group">
           <div className="w-8 h-8 bg-gray-100 group-hover:bg-red-50 rounded-lg flex items-center justify-center transition-colors">

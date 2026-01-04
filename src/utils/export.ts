@@ -147,3 +147,92 @@ export function normalizeRotation(deg: number): number {
   if (normalized < 0) normalized += 360;
   return normalized;
 }
+
+/**
+ * Generate a clean thumbnail/export image without grid, selection, etc.
+ * Returns base64 data URL
+ */
+export function generateCleanExport(options: ExportOptions & { quality?: 'thumbnail' | 'full' | 'tiny' }): string {
+  const {
+    stage,
+    boardSize,
+    dpi,
+    displayScale,
+    gridLayerName = 'gridLayer',
+    transformerName = 'transformer',
+    quality = 'full',
+  } = options;
+
+  // Calculate target pixel dimensions
+  const targetWidth = inchesToPx(boardSize.width, dpi);
+  const targetHeight = inchesToPx(boardSize.height, dpi);
+
+  // Calculate pixel ratio
+  const currentBoardDisplayWidth = targetWidth * displayScale;
+  const currentBoardDisplayHeight = targetHeight * displayScale;
+  
+  // For thumbnail, use lower resolution; for tiny (localStorage), use minimal resolution
+  let pixelRatio: number;
+  if (quality === 'tiny') {
+    // Very small for localStorage - max ~100px wide
+    pixelRatio = Math.min(0.05, 100 / currentBoardDisplayWidth);
+  } else if (quality === 'thumbnail') {
+    pixelRatio = Math.min(0.15, targetWidth / currentBoardDisplayWidth);
+  } else {
+    pixelRatio = targetWidth / currentBoardDisplayWidth;
+  }
+
+  // Find and hide grid layer
+  const gridLayer = stage.findOne(`.${gridLayerName}`);
+  const gridWasVisible = gridLayer?.visible();
+  if (gridLayer) {
+    gridLayer.visible(false);
+  }
+
+  // Find and hide transformer
+  const transformer = stage.findOne(`.${transformerName}`) as Konva.Transformer | null;
+  const transformerWasVisible = transformer?.visible();
+  if (transformer) {
+    transformer.visible(false);
+  }
+
+  // Hide all selection highlights
+  const selectionRects = stage.find('.selectionRect');
+  const selectionVisibility: boolean[] = [];
+  selectionRects.forEach((rect, index) => {
+    selectionVisibility[index] = rect.visible();
+    rect.visible(false);
+  });
+
+  // Force redraw
+  stage.batchDraw();
+
+  let dataUrl: string;
+  
+  try {
+    // Export with white background
+    dataUrl = stage.toDataURL({
+      mimeType: 'image/png',
+      pixelRatio: pixelRatio,
+      x: 0,
+      y: 0,
+      width: currentBoardDisplayWidth,
+      height: currentBoardDisplayHeight,
+    });
+  } finally {
+    // Restore visibility
+    if (gridLayer && gridWasVisible) {
+      gridLayer.visible(true);
+    }
+    if (transformer && transformerWasVisible) {
+      transformer.visible(true);
+    }
+    selectionRects.forEach((rect, index) => {
+      rect.visible(selectionVisibility[index]);
+    });
+
+    stage.batchDraw();
+  }
+
+  return dataUrl;
+}
