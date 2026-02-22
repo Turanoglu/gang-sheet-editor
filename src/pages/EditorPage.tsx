@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { v4 as uuidv4 } from 'uuid';
 import Konva from 'konva';
 import { GangSheetCanvas } from '../components/Canvas';
@@ -116,6 +115,12 @@ export const EditorPage: React.FC = () => {
 
   // Create design object from current state
   const createDesignObject = (): GangSheetDesign => {
+    // Generate thumbnail for preview (800px)
+    const thumbnailUrl = generateThumbnail('thumbnail');
+
+    // Generate print-ready export (150 DPI - suitable for DTF printing)
+    const fullExportUrl = generateThumbnail('print');
+
     return {
       id: uuidv4(),
       name: 'New Gang Sheet',
@@ -123,10 +128,8 @@ export const EditorPage: React.FC = () => {
       imageCount: items.length,
       createdAt: new Date(),
       updatedAt: new Date(),
-      // Use tiny thumbnail for localStorage to save space
-      thumbnailUrl: generateThumbnail('tiny'),
-      // Don't store full export - generate on demand when downloading
-      fullExportUrl: '',
+      thumbnailUrl,
+      fullExportUrl,
       canvasData: JSON.stringify(items),
       assetsData: JSON.stringify(assets),
     };
@@ -152,18 +155,6 @@ export const EditorPage: React.FC = () => {
     notification.textContent = '✓ Added to cart successfully!';
     document.body.appendChild(notification);
     setTimeout(() => notification.remove(), 2000);
-  };
-
-  // Handle Save
-  const handleSave = () => {
-    if (items.length === 0) {
-      alert('Please add at least one image to save.');
-      return;
-    }
-
-    const design = createDesignObject();
-    saveDesign(design);
-    alert('Design saved successfully! You can view it in the Admin Panel.');
   };
 
   // Calculate display dimensions
@@ -212,20 +203,6 @@ export const EditorPage: React.FC = () => {
             </svg>
             Save & Add to Cart
           </button>
-          <button 
-            onClick={handleSave}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded-lg 
-                       text-sm font-medium transition-colors shadow-sm"
-          >
-            Save
-          </button>
-          <Link 
-            to="/admin"
-            className="bg-purple-500 hover:bg-purple-600 text-white px-4 py-1.5 rounded-lg 
-                       text-sm font-medium transition-colors shadow-sm"
-          >
-            Admin Panel
-          </Link>
         </div>
 
         {/* Right - Price & Cart */}
@@ -260,7 +237,7 @@ export const EditorPage: React.FC = () => {
       </div>
 
       {/* Toolbar */}
-      <Toolbar stageRef={stageRef} displayScale={displayScale} />
+      <Toolbar />
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">

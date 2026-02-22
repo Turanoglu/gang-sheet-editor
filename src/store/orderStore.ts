@@ -2,6 +2,16 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import type { OrderStore, GangSheetDesign, Order, OrderStatus, CartItem } from '../types/order';
+import {
+  saveDesignToCloud,
+  getDesignsFromCloud,
+  deleteDesignFromCloud,
+  saveOrderToCloud,
+  getOrdersFromCloud,
+  updateOrderStatusInCloud,
+  deleteOrderFromCloud,
+  uploadImageToCloud,
+} from '../services/storageAPI';
 
 // Generate order number
 function generateOrderNumber(): string {
@@ -25,20 +35,17 @@ const safeLocalStorage = createJSONStorage(() => ({
       localStorage.setItem(name, value);
     } catch (error) {
       console.warn('Failed to write to localStorage (quota exceeded). Clearing old data...');
-      // Try to clear old thumbnails from designs to free space
       try {
         const data = JSON.parse(localStorage.getItem(name) || '{}');
         if (data.state?.designs) {
-          // Keep only recent 10 designs and remove thumbnails from older ones
           data.state.designs = data.state.designs.slice(-10).map((d: GangSheetDesign) => ({
             ...d,
-            thumbnailUrl: '', // Clear thumbnails to save space
+            thumbnailUrl: '',
             fullExportUrl: '',
           }));
           localStorage.setItem(name, JSON.stringify(data));
         }
       } catch {
-        // If still failing, clear the storage entirely
         localStorage.removeItem(name);
         console.warn('Cleared localStorage to free space');
       }
@@ -53,37 +60,158 @@ const safeLocalStorage = createJSONStorage(() => ({
   },
 }));
 
-export const useOrderStore = create<OrderStore>()(
+// Extended store interface with cloud sync
+interface ExtendedOrderStore extends OrderStore {
+  isCloudSyncing: boolean;
+  cloudSyncError: string | null;
+  lastCloudSync: Date | null;
+  loadFromCloud: () => Promise<void>;
+  syncToCloud: () => Promise<void>;
+}
+
+export const useOrderStore = create<ExtendedOrderStore>()(
   persist(
     (set, get) => ({
       orders: [],
       designs: [],
       currentDesign: null,
+      isCloudSyncing: false,
+      cloudSyncError: null,
+      lastCloudSync: null,
+
+      // Load data from cloud (call on app init)
+      loadFromCloud: async () => {
+        set({ isCloudSyncing: true, cloudSyncError: null });
+        try {
+          const [cloudDesigns, cloudOrders] = await Promise.all([
+            getDesignsFromCloud(),
+            getOrdersFromCloud(),
+          ]);
+
+          // Merge cloud data with local (cloud takes priority)
+          const localDesigns = get().designs;
+          const localOrders = get().orders;
+
+          // Create maps for quick lookup
+          const cloudDesignMap = new Map(cloudDesigns.map(d => [d.id, d]));
+          const cloudOrderMap = new Map(cloudOrders.map(o => [o.id, o]));
+
+          // Merge: cloud overwrites local, keep local-only items for sync
+          const mergedDesigns = [...cloudDesigns];
+          const localOnlyDesigns = localDesigns.filter(d => !cloudDesignMap.has(d.id));
+
+          const mergedOrders = [...cloudOrders];
+          const localOnlyOrders = localOrders.filter(o => !cloudOrderMap.has(o.id));
+
+          // Sync local-only items to cloud
+          for (const design of localOnlyDesigns) {
+            try {
+              await saveDesignToCloud(design);
+              mergedDesigns.push(design);
+            } catch (err) {
+              console.warn('Failed to sync local design to cloud:', err);
+              mergedDesigns.push(design); // Keep locally anyway
+            }
+          }
+
+          for (const order of localOnlyOrders) {
+            try {
+              await saveOrderToCloud(order);
+              mergedOrders.push(order);
+            } catch (err) {
+              console.warn('Failed to sync local order to cloud:', err);
+              mergedOrders.push(order);
+            }
+          }
+
+          set({
+            designs: mergedDesigns,
+            orders: mergedOrders,
+            isCloudSyncing: false,
+            lastCloudSync: new Date(),
+          });
+        } catch (error) {
+          console.error('Failed to load from cloud:', error);
+          set({
+            isCloudSyncing: false,
+            cloudSyncError: error instanceof Error ? error.message : 'Cloud sync failed',
+          });
+        }
+      },
+
+      // Manual sync trigger
+      syncToCloud: async () => {
+        const { designs, orders } = get();
+        set({ isCloudSyncing: true, cloudSyncError: null });
+
+        try {
+          await Promise.all([
+            ...designs.map(d => saveDesignToCloud(d)),
+            ...orders.map(o => saveOrderToCloud(o)),
+          ]);
+
+          set({
+            isCloudSyncing: false,
+            lastCloudSync: new Date(),
+          });
+        } catch (error) {
+          console.error('Failed to sync to cloud:', error);
+          set({
+            isCloudSyncing: false,
+            cloudSyncError: error instanceof Error ? error.message : 'Cloud sync failed',
+          });
+        }
+      },
 
       // Designs
-      saveDesign: (design: GangSheetDesign) => {
+      saveDesign: async (design: GangSheetDesign) => {
+        // Update local state immediately
         set((state) => {
-          // Limit to 50 designs max to prevent storage overflow
           let newDesigns = [...state.designs];
-          
-          // Check if design already exists
           const existingIndex = newDesigns.findIndex((d) => d.id === design.id);
           if (existingIndex >= 0) {
             newDesigns[existingIndex] = { ...design, updatedAt: new Date() };
           } else {
             newDesigns.push(design);
           }
-          
-          // Keep only last 50 designs
           if (newDesigns.length > 50) {
             newDesigns = newDesigns.slice(-50);
           }
-          
           return { designs: newDesigns };
         });
+
+        // Sync to cloud in background
+        try {
+          // Upload images to R2 if they exist
+          let cloudDesign = { ...design };
+
+          if (design.thumbnailUrl && design.thumbnailUrl.startsWith('data:')) {
+            try {
+              const result = await uploadImageToCloud(design.id, design.thumbnailUrl, 'thumbnail');
+              cloudDesign.thumbnailUrl = result.viewUrl;
+            } catch (err) {
+              console.warn('Failed to upload thumbnail:', err);
+            }
+          }
+
+          if (design.fullExportUrl && design.fullExportUrl.startsWith('data:')) {
+            try {
+              const result = await uploadImageToCloud(design.id, design.fullExportUrl, 'full-export');
+              cloudDesign.fullExportUrl = result.viewUrl;
+            } catch (err) {
+              console.warn('Failed to upload full export:', err);
+            }
+          }
+
+          await saveDesignToCloud(cloudDesign);
+        } catch (error) {
+          console.error('Failed to save design to cloud:', error);
+          set({ cloudSyncError: 'Failed to save design to cloud' });
+        }
       },
 
-      updateDesign: (id: string, updates: Partial<GangSheetDesign>) => {
+      updateDesign: async (id: string, updates: Partial<GangSheetDesign>) => {
+        // Update local state immediately
         set((state) => ({
           designs: state.designs.map((design) =>
             design.id === id
@@ -91,12 +219,30 @@ export const useOrderStore = create<OrderStore>()(
               : design
           ),
         }));
+
+        // Sync to cloud
+        const design = get().designs.find(d => d.id === id);
+        if (design) {
+          try {
+            await saveDesignToCloud(design);
+          } catch (error) {
+            console.error('Failed to update design in cloud:', error);
+          }
+        }
       },
 
-      deleteDesign: (id: string) => {
+      deleteDesign: async (id: string) => {
+        // Delete locally immediately
         set((state) => ({
           designs: state.designs.filter((design) => design.id !== id),
         }));
+
+        // Delete from cloud
+        try {
+          await deleteDesignFromCloud(id);
+        } catch (error) {
+          console.error('Failed to delete design from cloud:', error);
+        }
       },
 
       setCurrentDesign: (design: GangSheetDesign | null) => {
@@ -122,14 +268,21 @@ export const useOrderStore = create<OrderStore>()(
           product: 'Gang Sheet',
         };
 
+        // Update local state
         set((state) => ({
           orders: [order, ...state.orders],
         }));
 
+        // Sync to cloud
+        saveOrderToCloud(order).catch(error => {
+          console.error('Failed to save order to cloud:', error);
+        });
+
         return order;
       },
 
-      updateOrderStatus: (orderId: string, status: OrderStatus) => {
+      updateOrderStatus: async (orderId: string, status: OrderStatus) => {
+        // Update locally
         set((state) => ({
           orders: state.orders.map((order) =>
             order.id === orderId
@@ -137,12 +290,27 @@ export const useOrderStore = create<OrderStore>()(
               : order
           ),
         }));
+
+        // Sync to cloud
+        try {
+          await updateOrderStatusInCloud(orderId, status);
+        } catch (error) {
+          console.error('Failed to update order status in cloud:', error);
+        }
       },
 
-      deleteOrder: (orderId: string) => {
+      deleteOrder: async (orderId: string) => {
+        // Delete locally
         set((state) => ({
           orders: state.orders.filter((order) => order.id !== orderId),
         }));
+
+        // Delete from cloud
+        try {
+          await deleteOrderFromCloud(orderId);
+        } catch (error) {
+          console.error('Failed to delete order from cloud:', error);
+        }
       },
 
       getOrdersByStatus: (status: OrderStatus): Order[] => {
@@ -161,3 +329,10 @@ export const useOrderStore = create<OrderStore>()(
   )
 );
 
+// Initialize cloud sync on module load
+if (typeof window !== 'undefined') {
+  // Delay cloud sync to not block initial render
+  setTimeout(() => {
+    useOrderStore.getState().loadFromCloud();
+  }, 1000);
+}

@@ -1,14 +1,9 @@
-import React, { useRef, useCallback } from 'react';
-import { v4 as uuidv4 } from 'uuid';
-import Konva from 'konva';
+import React from 'react';
 import { useEditorStore } from '../../store/editorStore';
-import type { Asset, CanvasItem } from '../../types';
-import { BOARD_SIZES, inchesToPx } from '../../types';
-import { exportAsPng } from '../../utils/export';
+import { BOARD_SIZES } from '../../types';
 
 interface ToolbarProps {
-  stageRef: React.RefObject<Konva.Stage | null>;
-  displayScale: number;
+  // No props needed anymore
 }
 
 // Icon Components
@@ -85,12 +80,6 @@ const ZoomOutIcon = () => (
   </svg>
 );
 
-const DownloadIcon = () => (
-  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-  </svg>
-);
-
 const RefreshIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -115,10 +104,9 @@ const MoveToBottomIcon = () => (
   </svg>
 );
 
-export const Toolbar: React.FC<ToolbarProps> = ({ stageRef, displayScale }) => {
+export const Toolbar: React.FC<ToolbarProps> = () => {
   const {
     boardSize,
-    dpi,
     setBoardSize,
     items,
     selectedIds,
@@ -144,18 +132,6 @@ export const Toolbar: React.FC<ToolbarProps> = ({ stageRef, displayScale }) => {
 
   // Get selected items
   const selectedItems = items.filter(item => selectedIds.includes(item.id));
-
-  // Handle export
-  const handleExport = useCallback(() => {
-    if (!stageRef.current) return;
-
-    exportAsPng({
-      stage: stageRef.current,
-      boardSize,
-      dpi,
-      displayScale,
-    });
-  }, [stageRef, boardSize, dpi, displayScale]);
 
   // Handle board size change
   const handleBoardSizeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -299,28 +275,19 @@ export const Toolbar: React.FC<ToolbarProps> = ({ stageRef, displayScale }) => {
         <ToolButton icon={<ZoomInIcon />} title="Zoom In" onClick={zoomIn} />
       </div>
 
-      {/* Auto Build & Export */}
+      {/* Auto Build */}
       <div className="flex items-center gap-2">
         <button
           onClick={autoFillSheet}
           disabled={!hasSelection}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
-            ${hasSelection 
-              ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+            ${hasSelection
+              ? 'bg-blue-500 hover:bg-blue-600 text-white'
               : 'bg-gray-100 text-gray-400 cursor-not-allowed'
             }`}
         >
           <RefreshIcon />
           Auto Build
-        </button>
-
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 
-                     text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors"
-        >
-          <DownloadIcon />
-          Export PNG
         </button>
       </div>
     </div>

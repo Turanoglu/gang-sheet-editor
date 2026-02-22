@@ -2,10 +2,12 @@ import React, { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useOrderStore } from '../store/orderStore';
 import { WelcomeDashboard } from '../components/Dashboard';
+import { EditorSettings, AdminSettings } from '../components/Settings';
+import { useCloudSync } from '../hooks';
 import type { OrderStatus, Order, GangSheetDesign } from '../types/order';
 
 type TabType = 'All' | 'Draft' | 'In Cart' | 'Ordered' | 'Completed';
-type SidebarView = 'Welcome' | 'Designs' | 'Orders';
+type SidebarView = 'Welcome' | 'Designs' | 'Orders' | 'EditorSettings' | 'AdminSettings';
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
   'Draft': 'bg-gray-100 text-gray-600',
@@ -306,7 +308,23 @@ const EditNameModal: React.FC<{
 
 export const AdminPanel: React.FC = () => {
   const navigate = useNavigate();
-  const { orders, designs, updateOrderStatus, deleteOrder, deleteDesign, updateDesign, setCurrentDesign } = useOrderStore();
+  const {
+    orders,
+    designs,
+    updateOrderStatus,
+    deleteOrder,
+    deleteDesign,
+    updateDesign,
+    setCurrentDesign,
+    isCloudSyncing,
+    cloudSyncError,
+    lastCloudSync,
+    loadFromCloud,
+  } = useOrderStore();
+
+  // Enable cloud sync polling for admin panel
+  useCloudSync();
+
   const [activeTab, setActiveTab] = useState<TabType>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [perPage, setPerPage] = useState(20);
@@ -475,33 +493,35 @@ export const AdminPanel: React.FC = () => {
         {/* Navigation */}
         <nav className="flex-1 p-2">
           <div className="space-y-1">
+            {/* Dashboard */}
             <button
               onClick={() => setSidebarView('Welcome')}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                sidebarView === 'Welcome' 
-                  ? 'bg-blue-50 text-blue-600 font-medium' 
+                sidebarView === 'Welcome'
+                  ? 'bg-blue-50 text-blue-600 font-medium'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                       d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
               </svg>
-              <span>Welcome</span>
+              <span>Dashboard</span>
             </button>
-            
-            <SidebarItem icon="⚙️" label="Set up" />
-            <SidebarItem icon="🏷️" label="Products" />
-            
+
+            {/* Orders */}
             <button
               onClick={() => setSidebarView('Orders')}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                sidebarView === 'Orders' 
-                  ? 'bg-blue-50 text-blue-600 font-medium' 
+                sidebarView === 'Orders'
+                  ? 'bg-blue-50 text-blue-600 font-medium'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              <span>📦</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
               <span>Orders</span>
               {orders.length > 0 && (
                 <span className="ml-auto bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">
@@ -509,16 +529,20 @@ export const AdminPanel: React.FC = () => {
                 </span>
               )}
             </button>
-            
+
+            {/* Designs */}
             <button
               onClick={() => setSidebarView('Designs')}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                sidebarView === 'Designs' 
-                  ? 'bg-blue-50 text-blue-600 font-medium' 
+                sidebarView === 'Designs'
+                  ? 'bg-blue-50 text-blue-600 font-medium'
                   : 'text-gray-600 hover:bg-gray-100'
               }`}
             >
-              <span>📁</span>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
               <span>Designs</span>
               {designs.length > 0 && (
                 <span className="ml-auto bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">
@@ -526,38 +550,117 @@ export const AdminPanel: React.FC = () => {
                 </span>
               )}
             </button>
-
-            <SidebarItem icon="🔧" label="Build & Assign" />
           </div>
 
+          {/* Quick Actions */}
           <div className="mt-6 pt-4 border-t border-gray-200">
+            <div className="text-xs font-medium text-gray-400 px-3 mb-2">QUICK ACTIONS</div>
+            <Link
+              to="/"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-gray-600 hover:bg-gray-100"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>New Design</span>
+            </Link>
+          </div>
+
+          {/* Settings */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
             <div className="text-xs font-medium text-gray-400 px-3 mb-2">SETTINGS</div>
-            <SidebarItem icon="⚙️" label="General" />
-            <SidebarItem icon="📋" label="Gang Sheet" />
-            <SidebarItem icon="🎨" label="Builder" />
-            <SidebarItem icon="🖼️" label="Image to Sheet" />
-            <SidebarItem icon="🎭" label="Appearance" />
-            <SidebarItem icon="🖼️" label="Gallery Images" />
-            <SidebarItem icon="🖨️" label="Print on Demand" />
+            <div className="space-y-1">
+              <button
+                onClick={() => setSidebarView('EditorSettings')}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                  sidebarView === 'EditorSettings'
+                    ? 'bg-blue-50 text-blue-600 font-medium'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>Editor Settings</span>
+              </button>
+              <button
+                onClick={() => setSidebarView('AdminSettings')}
+                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                  sidebarView === 'AdminSettings'
+                    ? 'bg-blue-50 text-blue-600 font-medium'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Admin Settings</span>
+              </button>
+            </div>
           </div>
 
+          {/* Sync Status */}
           <div className="mt-4 pt-4 border-t border-gray-200">
-            <SidebarItem icon="💳" label="Transactions" />
-            <SidebarItem icon="🔤" label="Fonts" />
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-gray-200">
-            <SidebarItem icon="🎫" label="Support Ticket" />
+            <div className="text-xs font-medium text-gray-400 px-3 mb-2">CLOUD SYNC</div>
+            <div className="px-3 py-2">
+              {isCloudSyncing ? (
+                <div className="flex items-center gap-2 text-blue-600 text-sm">
+                  <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Syncing...</span>
+                </div>
+              ) : cloudSyncError ? (
+                <div className="flex items-center gap-2 text-red-600 text-sm">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Sync Error</span>
+                </div>
+              ) : lastCloudSync ? (
+                <div className="flex items-center gap-2 text-green-600 text-sm">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span>Synced</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-gray-500 text-sm">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  <span>Not synced</span>
+                </div>
+              )}
+              <button
+                onClick={() => loadFromCloud()}
+                disabled={isCloudSyncing}
+                className="mt-2 w-full text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
+              >
+                Refresh from cloud
+              </button>
+            </div>
           </div>
         </nav>
       </div>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
-        {/* Show WelcomeDashboard when Welcome is selected */}
+        {/* Show content based on sidebar selection */}
         {sidebarView === 'Welcome' ? (
           <div className="flex-1 overflow-auto bg-gray-50">
             <WelcomeDashboard />
+          </div>
+        ) : sidebarView === 'EditorSettings' ? (
+          <div className="flex-1 overflow-auto bg-gray-50">
+            <EditorSettings />
+          </div>
+        ) : sidebarView === 'AdminSettings' ? (
+          <div className="flex-1 overflow-auto bg-gray-50">
+            <AdminSettings />
           </div>
         ) : (
           <>
@@ -566,17 +669,15 @@ export const AdminPanel: React.FC = () => {
               <h1 className="text-xl font-semibold text-gray-800">
                 {sidebarView === 'Designs' ? 'Designs' : 'Orders'}
               </h1>
-              <div className="flex items-center gap-4">
-                <Link 
-                  to="/"
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  New Design
-                </Link>
-              </div>
+              <Link
+                to="/"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                New Design
+              </Link>
             </header>
 
             {/* Content */}
@@ -759,18 +860,6 @@ export const AdminPanel: React.FC = () => {
     </div>
   );
 };
-
-// Sidebar Item Component
-const SidebarItem: React.FC<{ icon: string; label: string; active?: boolean }> = ({ icon, label, active }) => (
-  <button
-    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-      active ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-600 hover:bg-gray-100'
-    }`}
-  >
-    <span>{icon}</span>
-    <span>{label}</span>
-  </button>
-);
 
 // Design Row Component
 const DesignRow: React.FC<{ 

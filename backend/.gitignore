@@ -1,0 +1,7 @@
+node_modules
+dist
+
+# Environment variables (contains secrets - never commit!)
+.env
+.env.*
+!.env.example

@@ -1,23 +1,56 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useCartStore } from '../../store/cartStore';
 import { useOrderStore } from '../../store/orderStore';
+import { createShopifyOrder } from '../../services/shopifyAPI';
 
 export const CartDrawer: React.FC = () => {
   const { items, isOpen, closeCart, removeFromCart, updateQuantity, getTotal, clearCart } = useCartStore();
   const { createOrder } = useOrderStore();
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
     if (items.length === 0) return;
-    
-    // Create order with "Guest" customer name (can be expanded later)
-    const order = createOrder('Guest Customer', items);
-    
-    // Clear cart after checkout
-    clearCart();
-    closeCart();
-    
-    // Show confirmation
-    alert(`Order ${order.orderNumber} created successfully!\n\nTotal: $${order.totalAmount.toFixed(2)}\n\nYou can view your order in the Admin Panel.`);
+
+    setIsCheckingOut(true);
+
+    try {
+      // Send order to Shopify
+      const response = await createShopifyOrder(items);
+
+      if (response.success && response.order) {
+        // Also save to local storage
+        const localOrder = createOrder('Guest Customer', items);
+
+        // Clear cart after successful checkout
+        clearCart();
+        closeCart();
+
+        // Show success message
+        alert(
+          `✅ Order created successfully!\n\n` +
+          `Shopify Order: ${response.order.name}\n` +
+          `Local Order: ${localOrder.orderNumber}\n` +
+          `Total: $${response.order.totalPrice}\n\n` +
+          `You can view your order in:\n` +
+          `• Shopify Admin Dashboard\n` +
+          `• Local Admin Panel`
+        );
+      } else {
+        throw new Error(response.error || 'Failed to create order');
+      }
+    } catch (error) {
+      console.error('Checkout error:', error);
+      alert(
+        `❌ Failed to create order in Shopify!\n\n` +
+        `Error: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
+        `Please check:\n` +
+        `• Backend server is running (localhost:3000)\n` +
+        `• SHOPIFY_ACCESS_TOKEN is set in backend/.env\n` +
+        `• Shopify API credentials are correct`
+      );
+    } finally {
+      setIsCheckingOut(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -164,11 +197,23 @@ export const CartDrawer: React.FC = () => {
             {/* Checkout Button */}
             <button
               onClick={handleCheckout}
-              className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 
-                         text-white py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl 
-                         transition-all transform hover:scale-[1.02]"
+              disabled={isCheckingOut}
+              className="w-full bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700
+                         text-white py-3 rounded-xl font-semibold shadow-lg hover:shadow-xl
+                         transition-all transform hover:scale-[1.02]
+                         disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
             >
-              Proceed to Checkout
+              {isCheckingOut ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Creating Order...
+                </span>
+              ) : (
+                'Proceed to Checkout'
+              )}
             </button>
 
             {/* Continue Shopping */}
@@ -186,4 +231,5 @@ export const CartDrawer: React.FC = () => {
 };
 
 export default CartDrawer;
+
 

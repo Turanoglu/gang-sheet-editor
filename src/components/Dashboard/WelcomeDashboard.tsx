@@ -13,6 +13,133 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
   'Cancelled': 'bg-red-100 text-red-700',
 };
 
+const PIE_COLORS: Record<OrderStatus, string> = {
+  'Draft': '#9ca3af',
+  'Created': '#3b82f6',
+  'In Cart': '#eab308',
+  'Ordered': '#a855f7',
+  'Processing': '#f97316',
+  'Completed': '#22c55e',
+  'Cancelled': '#ef4444',
+};
+
+// Donut Chart Component
+const DonutChart: React.FC<{
+  data: Record<OrderStatus, number>;
+  total: number;
+}> = ({ data, total }) => {
+  const segments = useMemo(() => {
+    if (total === 0) return [];
+
+    const statuses: OrderStatus[] = ['Draft', 'Created', 'In Cart', 'Ordered', 'Processing', 'Completed', 'Cancelled'];
+    let currentAngle = 0;
+
+    return statuses
+      .filter(status => (data[status] || 0) > 0)
+      .map(status => {
+        const value = data[status] || 0;
+        const percentage = (value / total) * 100;
+        const angle = (value / total) * 360;
+        const startAngle = currentAngle;
+        currentAngle += angle;
+
+        return {
+          status,
+          value,
+          percentage,
+          color: PIE_COLORS[status],
+          startAngle,
+          endAngle: currentAngle,
+        };
+      });
+  }, [data, total]);
+
+  const getSlicePath = (startAngle: number, endAngle: number, radius: number = 70, innerRadius: number = 45) => {
+    const startRad = (startAngle - 90) * Math.PI / 180;
+    const endRad = (endAngle - 90) * Math.PI / 180;
+
+    const x1 = 90 + radius * Math.cos(startRad);
+    const y1 = 90 + radius * Math.sin(startRad);
+    const x2 = 90 + radius * Math.cos(endRad);
+    const y2 = 90 + radius * Math.sin(endRad);
+
+    const x3 = 90 + innerRadius * Math.cos(endRad);
+    const y3 = 90 + innerRadius * Math.sin(endRad);
+    const x4 = 90 + innerRadius * Math.cos(startRad);
+    const y4 = 90 + innerRadius * Math.sin(startRad);
+
+    const largeArc = endAngle - startAngle > 180 ? 1 : 0;
+
+    return `M ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${x4} ${y4} Z`;
+  };
+
+  if (total === 0) {
+    return (
+      <div className="flex items-center justify-center h-44">
+        <div className="text-center text-gray-400">
+          <svg className="w-12 h-12 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+          </svg>
+          <p className="text-sm">No data</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-6">
+      <svg width="180" height="180" viewBox="0 0 180 180" className="flex-shrink-0">
+        {/* Background circle */}
+        <circle cx="90" cy="90" r="70" fill="#f3f4f6" />
+
+        {/* Pie slices */}
+        {segments.map((segment, index) => (
+          <path
+            key={index}
+            d={getSlicePath(segment.startAngle, segment.endAngle)}
+            fill={segment.color}
+            className="transition-all duration-300 hover:opacity-80"
+            style={{ cursor: 'pointer' }}
+          >
+            <title>{segment.status}: {segment.value} ({segment.percentage.toFixed(1)}%)</title>
+          </path>
+        ))}
+
+        {/* Center hole */}
+        <circle cx="90" cy="90" r="45" fill="white" />
+
+        {/* Center text */}
+        <text x="90" y="85" textAnchor="middle" className="fill-gray-800 font-bold" style={{ fontSize: '24px' }}>
+          {total}
+        </text>
+        <text x="90" y="105" textAnchor="middle" className="fill-gray-500" style={{ fontSize: '12px' }}>
+          Total
+        </text>
+      </svg>
+
+      {/* Legend */}
+      <div className="flex-1 space-y-2">
+        {segments.map((segment) => (
+          <div key={segment.status} className="flex items-center justify-between text-sm">
+            <div className="flex items-center gap-2">
+              <div
+                className="w-3 h-3 rounded-full"
+                style={{ backgroundColor: segment.color }}
+              />
+              <span className="text-gray-600">{segment.status}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-gray-800">{segment.value}</span>
+              <span className="text-gray-400 text-xs">({segment.percentage.toFixed(0)}%)</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export const WelcomeDashboard: React.FC = () => {
   const { orders, designs } = useOrderStore();
 
@@ -38,15 +165,6 @@ export const WelcomeDashboard: React.FC = () => {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 5);
 
-    // Design types summary
-    const designTypes = {
-      'Gang Sheet': designs.length,
-      'Sticker': 0,
-      'Rolling Gang Sheet': 0,
-      'Upload By Size': 0,
-      'Image to Sheet': 0,
-    };
-
     return {
       totalSheets,
       totalOrders,
@@ -54,7 +172,6 @@ export const WelcomeDashboard: React.FC = () => {
       ordersByStatus,
       recentDesigns,
       recentOrders,
-      designTypes,
     };
   }, [orders, designs]);
 
@@ -66,45 +183,6 @@ export const WelcomeDashboard: React.FC = () => {
     });
   };
 
-  // Pie chart data
-  const pieData = useMemo(() => {
-    const total = Object.values(stats.designTypes).reduce((a, b) => a + b, 0);
-    if (total === 0) return [];
-    
-    const colors = ['#3b82f6', '#22c55e', '#f59e0b', '#ef4444', '#a855f7'];
-    let currentAngle = 0;
-    
-    return Object.entries(stats.designTypes).map(([name, value], index) => {
-      const percentage = (value / total) * 100;
-      const angle = (value / total) * 360;
-      const startAngle = currentAngle;
-      currentAngle += angle;
-      
-      return {
-        name,
-        value,
-        percentage,
-        color: colors[index % colors.length],
-        startAngle,
-        endAngle: currentAngle,
-      };
-    });
-  }, [stats.designTypes]);
-
-  // Generate SVG path for pie slice
-  const getSlicePath = (startAngle: number, endAngle: number, radius: number = 80) => {
-    const startRad = (startAngle - 90) * Math.PI / 180;
-    const endRad = (endAngle - 90) * Math.PI / 180;
-    
-    const x1 = 100 + radius * Math.cos(startRad);
-    const y1 = 100 + radius * Math.sin(startRad);
-    const x2 = 100 + radius * Math.cos(endRad);
-    const y2 = 100 + radius * Math.sin(endRad);
-    
-    const largeArc = endAngle - startAngle > 180 ? 1 : 0;
-    
-    return `M 100 100 L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
-  };
 
   return (
     <div className="p-6 space-y-6">
@@ -117,12 +195,6 @@ export const WelcomeDashboard: React.FC = () => {
       <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-700">Shop Statistics</h2>
-          <select className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 text-gray-600">
-            <option>Last A Month</option>
-            <option>Last 3 Months</option>
-            <option>Last 6 Months</option>
-            <option>All Time</option>
-          </select>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -170,80 +242,33 @@ export const WelcomeDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Charts Row */}
+      {/* Orders by Status */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Usage Breakdown */}
+        {/* Donut Chart */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-lg font-semibold text-gray-700 mb-4">Usage Breakdown (Last a month)</h3>
-          
-          {/* Legend */}
-          <div className="flex flex-wrap gap-4 mb-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-blue-500 rounded"></div>
-              <span className="text-gray-600">Gang Sheet</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-green-500 rounded"></div>
-              <span className="text-gray-600">Sticker</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-yellow-500 rounded"></div>
-              <span className="text-gray-600">Rolling Gang Sheet</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-red-500 rounded"></div>
-              <span className="text-gray-600">Upload By Size</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 bg-purple-500 rounded"></div>
-              <span className="text-gray-600">Image to Sheet</span>
-            </div>
-          </div>
-
-          {/* Pie Chart */}
-          <div className="flex justify-center">
-            <svg width="200" height="200" viewBox="0 0 200 200">
-              {/* Background circle */}
-              <circle cx="100" cy="100" r="80" fill="#f3f4f6" />
-              
-              {/* Pie slices */}
-              {pieData.map((slice, index) => (
-                slice.value > 0 && (
-                  <path
-                    key={index}
-                    d={getSlicePath(slice.startAngle, slice.endAngle)}
-                    fill={slice.color}
-                    className="transition-all duration-300 hover:opacity-80"
-                  />
-                )
-              ))}
-              
-              {/* Center hole for donut effect */}
-              <circle cx="100" cy="100" r="50" fill="white" />
-              
-              {/* Center text */}
-              <text x="100" y="95" textAnchor="middle" className="text-2xl font-bold fill-gray-800">
-                {stats.totalSheets}
-              </text>
-              <text x="100" y="115" textAnchor="middle" className="text-xs fill-gray-500">
-                Total
-              </text>
-            </svg>
-          </div>
+          <h3 className="text-lg font-semibold text-gray-700 mb-4">Orders Overview</h3>
+          <DonutChart data={stats.ordersByStatus} total={stats.totalOrders} />
         </div>
 
-        {/* Design Types Summary */}
+        {/* Status Cards */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="text-lg font-semibold text-gray-700 mb-4">Design Types Summary</h3>
-          
-          <div className="space-y-3">
-            {Object.entries(stats.designTypes).map(([type, count]) => (
-              <div key={type} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                <span className="text-gray-600">{type}</span>
-                <span className="font-semibold text-gray-800">{count}</span>
-              </div>
-            ))}
-          </div>
+          <h3 className="text-lg font-semibold text-gray-700 mb-4">Orders by Status</h3>
+          {stats.totalOrders === 0 ? (
+            <div className="text-center py-8 text-gray-400">
+              <p>No orders yet</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {(['Draft', 'Created', 'In Cart', 'Ordered', 'Processing', 'Completed', 'Cancelled'] as OrderStatus[]).map((status) => (
+                <div key={status} className="text-center p-3 bg-gray-50 rounded-lg">
+                  <div className={`inline-block px-2 py-1 rounded-full text-xs font-medium mb-2 ${STATUS_COLORS[status]}`}>
+                    {status}
+                  </div>
+                  <p className="text-2xl font-bold text-gray-800">{stats.ordersByStatus[status] || 0}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -358,4 +383,5 @@ export const WelcomeDashboard: React.FC = () => {
 };
 
 export default WelcomeDashboard;
+
 

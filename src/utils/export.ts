@@ -9,12 +9,13 @@ export interface ExportOptions {
   displayScale: number; // Current scale of the stage for display
   gridLayerName?: string;
   transformerName?: string;
+  quality?: 'thumbnail' | 'full' | 'tiny' | 'print';
 }
 
 /**
- * Export the stage as PNG with exact board dimensions and white background
+ * Generate a clean export/thumbnail as data URL (without grid, selections, etc.)
  */
-export async function exportAsPng(options: ExportOptions): Promise<void> {
+export function generateCleanExport(options: ExportOptions): string {
   const {
     stage,
     boardSize,
@@ -22,16 +23,40 @@ export async function exportAsPng(options: ExportOptions): Promise<void> {
     displayScale,
     gridLayerName = 'gridLayer',
     transformerName = 'transformer',
+    quality = 'thumbnail',
   } = options;
 
-  // Calculate target pixel dimensions
+  // Calculate target pixel dimensions based on quality
+  let pixelRatio = 1;
   const targetWidth = inchesToPx(boardSize.width, dpi);
   const targetHeight = inchesToPx(boardSize.height, dpi);
-
-  // Calculate pixel ratio to get exact dimensions
   const currentBoardDisplayWidth = targetWidth * displayScale;
   const currentBoardDisplayHeight = targetHeight * displayScale;
-  const pixelRatio = targetWidth / currentBoardDisplayWidth;
+
+  if (quality === 'full') {
+    // Full resolution (original DPI)
+    pixelRatio = targetWidth / currentBoardDisplayWidth;
+  } else if (quality === 'print') {
+    // Print-ready resolution (150 DPI - good for DTF printing)
+    const printDpi = 150;
+    const printWidth = boardSize.width * printDpi;
+    pixelRatio = printWidth / currentBoardDisplayWidth;
+  } else if (quality === 'thumbnail') {
+    // Medium resolution for previews (max 800px width)
+    const maxWidth = 800;
+    pixelRatio = Math.min(maxWidth / currentBoardDisplayWidth, targetWidth / currentBoardDisplayWidth);
+  } else if (quality === 'tiny') {
+    // Tiny resolution for storage (max 200px width)
+    const maxWidth = 200;
+    pixelRatio = Math.min(maxWidth / currentBoardDisplayWidth, targetWidth / currentBoardDisplayWidth);
+  }
+
+  // Find and hide background layer for transparent export
+  const backgroundLayer = stage.findOne('.backgroundLayer');
+  const backgroundWasVisible = backgroundLayer?.visible();
+  if (backgroundLayer) {
+    backgroundLayer.visible(false);
+  }
 
   // Find and hide grid layer
   const gridLayer = stage.findOne(`.${gridLayerName}`);
@@ -59,7 +84,92 @@ export async function exportAsPng(options: ExportOptions): Promise<void> {
   stage.batchDraw();
 
   try {
-    // Export with white background
+    // Export as data URL
+    const dataUrl = stage.toDataURL({
+      mimeType: 'image/png',
+      pixelRatio: pixelRatio,
+      x: 0,
+      y: 0,
+      width: currentBoardDisplayWidth,
+      height: currentBoardDisplayHeight,
+    });
+
+    return dataUrl;
+  } finally {
+    // Restore visibility
+    if (backgroundLayer && backgroundWasVisible) {
+      backgroundLayer.visible(true);
+    }
+    if (gridLayer && gridWasVisible) {
+      gridLayer.visible(true);
+    }
+    if (transformer && transformerWasVisible) {
+      transformer.visible(true);
+    }
+    selectionRects.forEach((rect, index) => {
+      rect.visible(selectionVisibility[index]);
+    });
+
+    stage.batchDraw();
+  }
+}
+
+/**
+ * Export the stage as PNG with exact board dimensions and transparent background
+ */
+export async function exportAsPng(options: ExportOptions): Promise<void> {
+  const {
+    stage,
+    boardSize,
+    dpi,
+    displayScale,
+    gridLayerName = 'gridLayer',
+    transformerName = 'transformer',
+  } = options;
+
+  // Calculate target pixel dimensions
+  const targetWidth = inchesToPx(boardSize.width, dpi);
+  const targetHeight = inchesToPx(boardSize.height, dpi);
+
+  // Calculate pixel ratio to get exact dimensions
+  const currentBoardDisplayWidth = targetWidth * displayScale;
+  const currentBoardDisplayHeight = targetHeight * displayScale;
+  const pixelRatio = targetWidth / currentBoardDisplayWidth;
+
+  // Find and hide background layer for transparent export
+  const backgroundLayer = stage.findOne('.backgroundLayer');
+  const backgroundWasVisible = backgroundLayer?.visible();
+  if (backgroundLayer) {
+    backgroundLayer.visible(false);
+  }
+
+  // Find and hide grid layer
+  const gridLayer = stage.findOne(`.${gridLayerName}`);
+  const gridWasVisible = gridLayer?.visible();
+  if (gridLayer) {
+    gridLayer.visible(false);
+  }
+
+  // Find and hide transformer
+  const transformer = stage.findOne(`.${transformerName}`) as Konva.Transformer | null;
+  const transformerWasVisible = transformer?.visible();
+  if (transformer) {
+    transformer.visible(false);
+  }
+
+  // Hide all selection highlights
+  const selectionRects = stage.find('.selectionRect');
+  const selectionVisibility: boolean[] = [];
+  selectionRects.forEach((rect, index) => {
+    selectionVisibility[index] = rect.visible();
+    rect.visible(false);
+  });
+
+  // Force redraw
+  stage.batchDraw();
+
+  try {
+    // Export with transparent background
     const dataUrl = stage.toDataURL({
       mimeType: 'image/png',
       pixelRatio: pixelRatio,
@@ -78,6 +188,9 @@ export async function exportAsPng(options: ExportOptions): Promise<void> {
     document.body.removeChild(link);
   } finally {
     // Restore visibility
+    if (backgroundLayer && backgroundWasVisible) {
+      backgroundLayer.visible(true);
+    }
     if (gridLayer && gridWasVisible) {
       gridLayer.visible(true);
     }
@@ -146,93 +259,4 @@ export function normalizeRotation(deg: number): number {
   let normalized = deg % 360;
   if (normalized < 0) normalized += 360;
   return normalized;
-}
-
-/**
- * Generate a clean thumbnail/export image without grid, selection, etc.
- * Returns base64 data URL
- */
-export function generateCleanExport(options: ExportOptions & { quality?: 'thumbnail' | 'full' | 'tiny' }): string {
-  const {
-    stage,
-    boardSize,
-    dpi,
-    displayScale,
-    gridLayerName = 'gridLayer',
-    transformerName = 'transformer',
-    quality = 'full',
-  } = options;
-
-  // Calculate target pixel dimensions
-  const targetWidth = inchesToPx(boardSize.width, dpi);
-  const targetHeight = inchesToPx(boardSize.height, dpi);
-
-  // Calculate pixel ratio
-  const currentBoardDisplayWidth = targetWidth * displayScale;
-  const currentBoardDisplayHeight = targetHeight * displayScale;
-  
-  // For thumbnail, use lower resolution; for tiny (localStorage), use minimal resolution
-  let pixelRatio: number;
-  if (quality === 'tiny') {
-    // Very small for localStorage - max ~100px wide
-    pixelRatio = Math.min(0.05, 100 / currentBoardDisplayWidth);
-  } else if (quality === 'thumbnail') {
-    pixelRatio = Math.min(0.15, targetWidth / currentBoardDisplayWidth);
-  } else {
-    pixelRatio = targetWidth / currentBoardDisplayWidth;
-  }
-
-  // Find and hide grid layer
-  const gridLayer = stage.findOne(`.${gridLayerName}`);
-  const gridWasVisible = gridLayer?.visible();
-  if (gridLayer) {
-    gridLayer.visible(false);
-  }
-
-  // Find and hide transformer
-  const transformer = stage.findOne(`.${transformerName}`) as Konva.Transformer | null;
-  const transformerWasVisible = transformer?.visible();
-  if (transformer) {
-    transformer.visible(false);
-  }
-
-  // Hide all selection highlights
-  const selectionRects = stage.find('.selectionRect');
-  const selectionVisibility: boolean[] = [];
-  selectionRects.forEach((rect, index) => {
-    selectionVisibility[index] = rect.visible();
-    rect.visible(false);
-  });
-
-  // Force redraw
-  stage.batchDraw();
-
-  let dataUrl: string;
-  
-  try {
-    // Export with white background
-    dataUrl = stage.toDataURL({
-      mimeType: 'image/png',
-      pixelRatio: pixelRatio,
-      x: 0,
-      y: 0,
-      width: currentBoardDisplayWidth,
-      height: currentBoardDisplayHeight,
-    });
-  } finally {
-    // Restore visibility
-    if (gridLayer && gridWasVisible) {
-      gridLayer.visible(true);
-    }
-    if (transformer && transformerWasVisible) {
-      transformer.visible(true);
-    }
-    selectionRects.forEach((rect, index) => {
-      rect.visible(selectionVisibility[index]);
-    });
-
-    stage.batchDraw();
-  }
-
-  return dataUrl;
 }
