@@ -1,10 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useOrderStore } from '../store/orderStore';
 import { WelcomeDashboard } from '../components/Dashboard';
 import { EditorSettings, AdminSettings } from '../components/Settings';
 import { useCloudSync } from '../hooks';
 import type { OrderStatus, Order, GangSheetDesign } from '../types/order';
+
+const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
 
 type TabType = 'All' | 'Draft' | 'In Cart' | 'Ordered' | 'Completed';
 type SidebarView = 'Welcome' | 'Designs' | 'Orders' | 'EditorSettings' | 'AdminSettings';
@@ -309,8 +311,6 @@ const EditNameModal: React.FC<{
 export const AdminPanel: React.FC = () => {
   const navigate = useNavigate();
   const {
-    orders,
-    designs,
     updateOrderStatus,
     deleteOrder,
     deleteDesign,
@@ -330,7 +330,37 @@ export const AdminPanel: React.FC = () => {
   const [perPage, setPerPage] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [sidebarView, setSidebarView] = useState<SidebarView>('Welcome');
-  
+
+  // Admin data from backend (all customers)
+  const [adminOrders, setAdminOrders] = useState<Order[]>([]);
+  const [adminDesigns, setAdminDesigns] = useState<GangSheetDesign[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
+
+  const loadAdminData = useCallback(async () => {
+    setAdminLoading(true);
+    try {
+      const [ordersRes, designsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/storage/admin/orders`),
+        fetch(`${API_BASE_URL}/api/storage/admin/designs`),
+      ]);
+      const ordersData = await ordersRes.json();
+      const designsData = await designsRes.json();
+      if (ordersData.success) setAdminOrders(ordersData.orders || []);
+      if (designsData.success) setAdminDesigns(designsData.designs || []);
+    } catch (e) {
+      console.error('Failed to load admin data:', e);
+    } finally {
+      setAdminLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAdminData();
+  }, [loadAdminData]);
+
+  const orders = adminOrders;
+  const designs = adminDesigns;
+
   // Modal states
   const [viewDesign, setViewDesign] = useState<GangSheetDesign | null>(null);
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
@@ -636,11 +666,11 @@ export const AdminPanel: React.FC = () => {
                 </div>
               )}
               <button
-                onClick={() => loadFromCloud()}
-                disabled={isCloudSyncing}
+                onClick={() => { loadFromCloud(); loadAdminData(); }}
+                disabled={isCloudSyncing || adminLoading}
                 className="mt-2 w-full text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
               >
-                Refresh from cloud
+                {adminLoading ? 'Loading...' : 'Refresh from cloud'}
               </button>
             </div>
           </div>
