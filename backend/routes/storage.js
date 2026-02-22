@@ -370,4 +370,79 @@ router.post('/upload-image', async (req, res) => {
   }
 });
 
+// ==================== ADMIN ENDPOINTS ====================
+
+// Get ALL orders from ALL customers (admin only)
+router.get('/admin/orders', async (req, res) => {
+  try {
+    const listResponse = await s3Client.send(new ListObjectsV2Command({
+      Bucket: BUCKET_NAME,
+      Prefix: 'users/',
+    }));
+
+    const orderKeys = (listResponse.Contents || [])
+      .filter(obj => obj.Key.includes('/orders/') && obj.Key.endsWith('.json'));
+
+    const orders = [];
+    for (const obj of orderKeys) {
+      try {
+        const getResponse = await s3Client.send(new GetObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: obj.Key,
+        }));
+        const body = await streamToString(getResponse.Body);
+        const parsed = JSON.parse(body);
+        // Attach customerId from the path: users/{customerId}/orders/{id}.json
+        const parts = obj.Key.split('/');
+        parsed.customerId = parts[1];
+        orders.push(parsed);
+      } catch (e) {
+        console.error('Error reading order:', obj.Key, e.message);
+      }
+    }
+
+    orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json({ success: true, orders });
+  } catch (error) {
+    console.error('Error fetching all orders:', error);
+    res.status(500).json({ error: 'Failed to fetch orders', message: error.message });
+  }
+});
+
+// Get ALL designs from ALL customers (admin only)
+router.get('/admin/designs', async (req, res) => {
+  try {
+    const listResponse = await s3Client.send(new ListObjectsV2Command({
+      Bucket: BUCKET_NAME,
+      Prefix: 'users/',
+    }));
+
+    const designKeys = (listResponse.Contents || [])
+      .filter(obj => obj.Key.includes('/designs/') && obj.Key.endsWith('.json'));
+
+    const designs = [];
+    for (const obj of designKeys) {
+      try {
+        const getResponse = await s3Client.send(new GetObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: obj.Key,
+        }));
+        const body = await streamToString(getResponse.Body);
+        const parsed = JSON.parse(body);
+        const parts = obj.Key.split('/');
+        parsed.customerId = parts[1];
+        designs.push(parsed);
+      } catch (e) {
+        console.error('Error reading design:', obj.Key, e.message);
+      }
+    }
+
+    designs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json({ success: true, designs });
+  } catch (error) {
+    console.error('Error fetching all designs:', error);
+    res.status(500).json({ error: 'Failed to fetch designs', message: error.message });
+  }
+});
+
 module.exports = router;
