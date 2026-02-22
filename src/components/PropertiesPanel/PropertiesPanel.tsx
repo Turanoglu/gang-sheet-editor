@@ -31,12 +31,6 @@ export const PropertiesPanel: React.FC = () => {
   // Calculate total images
   const totalImages = items.length;
 
-  // Group items by asset for display
-  const assetGroups = Object.values(assets).map(asset => ({
-    asset,
-    items: items.filter(item => item.assetId === asset.id),
-  })).filter(group => group.items.length > 0);
-
   // Handle file upload for "Add new design"
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;

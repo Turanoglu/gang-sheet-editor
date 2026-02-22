@@ -423,13 +423,12 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
   },
 
   applyQuantities: () => {
-    const { items, itemQuantities, assets, getBoardPxWidth, getBoardPxHeight } = get();
-    
+    const { items, itemQuantities, getBoardPxWidth, getBoardPxHeight } = get();
+
     get().pushToHistory();
-    
+
     const boardWidth = getBoardPxWidth();
     const boardHeight = getBoardPxHeight();
-    const newItems: CanvasItem[] = [];
     const maxZIndex = Math.max(...items.map((i) => i.zIndex), 0);
     let zIndexCounter = maxZIndex + 1;
 
@@ -570,7 +569,7 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
 
   // Position control - Move selected items to top of board
   moveToTop: () => {
-    const { items, selectedIds } = get();
+    const { selectedIds } = get();
     if (selectedIds.length === 0) return;
 
     get().pushToHistory();
@@ -590,7 +589,7 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
 
   // Position control - Move selected items to bottom of board
   moveToBottom: () => {
-    const { items, selectedIds, getBoardPxHeight } = get();
+    const { selectedIds, getBoardPxHeight } = get();
     if (selectedIds.length === 0) return;
 
     get().pushToHistory();

@@ -98,7 +98,7 @@ export const EditorPage: React.FC = () => {
   }, [handleKeyDown]);
 
   // Generate clean thumbnail from canvas (without grid, selections, etc.)
-  const generateThumbnail = (quality: 'thumbnail' | 'full' | 'tiny' = 'thumbnail'): string => {
+  const generateThumbnail = (quality: 'thumbnail' | 'full' | 'tiny' | 'print' = 'thumbnail'): string => {
     if (!stageRef.current) return '';
     try {
       return generateCleanExport({

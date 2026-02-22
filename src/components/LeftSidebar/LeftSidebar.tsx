@@ -18,7 +18,6 @@ export const LeftSidebar: React.FC = () => {
     setSelectedIds,
     updateItem,
     duplicateSelectedItems,
-    removeSelectedItems,
     autoFillSheet,
     dpi,
     itemQuantities,
