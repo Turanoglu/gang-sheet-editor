@@ -204,6 +204,15 @@ export const useOrderStore = create<ExtendedOrderStore>()(
           }
 
           await saveDesignToCloud(cloudDesign);
+
+          // Replace base64 with cloud URLs in local state to avoid localStorage quota issues
+          set((state) => ({
+            designs: state.designs.map((d) =>
+              d.id === design.id
+                ? { ...d, thumbnailUrl: cloudDesign.thumbnailUrl, fullExportUrl: cloudDesign.fullExportUrl }
+                : d
+            ),
+          }));
         } catch (error) {
           console.error('Failed to save design to cloud:', error);
           set({ cloudSyncError: 'Failed to save design to cloud' });

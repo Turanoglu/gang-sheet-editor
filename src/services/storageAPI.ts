@@ -45,6 +45,16 @@ export function getStoredCustomerEmail(): string | null {
   return localStorage.getItem('gang-sheet-customer-email');
 }
 
+export function isAuthenticated(): boolean {
+  // Shopify global variable (set by Liquid template)
+  if ((window as any).__SHOPIFY_CUSTOMER_ID__) return true;
+  // URL param passed from Shopify Liquid
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('customerId')) return true;
+  // Previously stored real customer ID from a Shopify session
+  return !!localStorage.getItem('gang-sheet-customer-id');
+}
+
 // Helper for fetch with customer ID header
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   const customerId = getCustomerId();
