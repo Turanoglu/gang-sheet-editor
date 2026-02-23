@@ -163,6 +163,7 @@ export const LeftSidebar: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  const [widthInput, setWidthInput] = useState('');
   const [heightInput, setHeightInput] = useState('');
 
   const {
@@ -189,9 +190,10 @@ export const LeftSidebar: React.FC = () => {
 
   const selectedAsset = selectedItem ? assets[selectedItem.assetId] : null;
 
-  // Sync heightInput only when the SELECTED ITEM changes (not on every height update)
+  // Sync width/height inputs only when the SELECTED ITEM changes
   useEffect(() => {
     if (selectedItem) {
+      setWidthInput(pxToInches(selectedItem.width, dpi).toFixed(2));
       setHeightInput(pxToInches(selectedItem.height, dpi).toFixed(2));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -389,11 +391,11 @@ export const LeftSidebar: React.FC = () => {
       const aspectRatio = selectedItem.width / selectedItem.height;
       const newHeightPx = newWidthPx / aspectRatio;
       updateItem(selectedItem.id, { width: newWidthPx, height: newHeightPx });
-      // Also update height input to reflect new proportional height
       setHeightInput(pxToInches(newHeightPx, dpi).toFixed(2));
     } else {
       updateItem(selectedItem.id, { width: newWidthPx });
     }
+    setWidthInput(pxToInches(newWidthPx, dpi).toFixed(2));
   };
 
   // Handle height change
@@ -563,12 +565,19 @@ export const LeftSidebar: React.FC = () => {
                 <label className="block text-xs font-medium text-gray-500 mb-1">Width:</label>
                 <div className="flex items-center">
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={pxToInches(selectedItem.width, dpi).toFixed(2)}
-                    onChange={(e) => handleWidthChange(e.target.value)}
-                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm 
+                    type="text"
+                    inputMode="decimal"
+                    value={widthInput}
+                    onChange={(e) => setWidthInput(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    onBlur={() => handleWidthChange(widthInput)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleWidthChange(widthInput);
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
+                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm
                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <span className="text-xs text-gray-400 ml-2 font-medium">in</span>
