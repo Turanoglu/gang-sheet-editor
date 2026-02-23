@@ -46,7 +46,21 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
 
   // Board
   setBoardSize: (size: BoardSize) => {
-    set({ boardSize: size });
+    const { items, dpi } = get();
+    const newBoardWidth = inchesToPx(size.width, dpi);
+    const newBoardHeight = inchesToPx(size.height, dpi);
+
+    const repositionedItems = items.map((item) => {
+      const maxX = Math.max(0, newBoardWidth - item.width);
+      const maxY = Math.max(0, newBoardHeight - item.height);
+      return {
+        ...item,
+        x: Math.min(Math.max(0, item.x), maxX),
+        y: Math.min(Math.max(0, item.y), maxY),
+      };
+    });
+
+    set({ boardSize: size, items: repositionedItems });
   },
 
   setDpi: (dpi: number) => {

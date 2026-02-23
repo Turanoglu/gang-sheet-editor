@@ -1,14 +1,170 @@
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useEditorStore } from '../../store/editorStore';
 import { loadImageFile } from '../../utils/export';
 import { inchesToPx, pxToInches, calculateResolution, getResolutionQuality } from '../../types';
 import type { Asset, CanvasItem } from '../../types';
 
+// ==================== EDIT IMAGE MODAL ====================
+const EditImageModal: React.FC<{
+  asset: Asset;
+  onClose: () => void;
+  onApply: (croppedDataUrl: string, newWidth: number, newHeight: number) => void;
+}> = ({ asset, onClose, onApply }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [cropStart, setCropStart] = useState<{ x: number; y: number } | null>(null);
+  const [cropEnd, setCropEnd] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Scale image to fit in modal (max 480px)
+  const maxDisplay = 480;
+  const scale = Math.min(maxDisplay / asset.originalWidth, maxDisplay / asset.originalHeight, 1);
+  const displayWidth = Math.round(asset.originalWidth * scale);
+  const displayHeight = Math.round(asset.originalHeight * scale);
+
+  const getRelativePos = (e: React.MouseEvent) => {
+    const rect = containerRef.current!.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(e.clientX - rect.left, displayWidth)),
+      y: Math.max(0, Math.min(e.clientY - rect.top, displayHeight)),
+    };
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    const pos = getRelativePos(e);
+    setCropStart(pos);
+    setCropEnd(pos);
+    setIsDragging(true);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return;
+    setCropEnd(getRelativePos(e));
+  };
+
+  const handleMouseUp = () => setIsDragging(false);
+
+  const cropRect = cropStart && cropEnd
+    ? {
+        x: Math.min(cropStart.x, cropEnd.x),
+        y: Math.min(cropStart.y, cropEnd.y),
+        w: Math.abs(cropEnd.x - cropStart.x),
+        h: Math.abs(cropEnd.y - cropStart.y),
+      }
+    : null;
+
+  const handleApplyCrop = () => {
+    if (!cropRect || cropRect.w < 5 || cropRect.h < 5) {
+      alert('Lütfen kırpılacak bir alan seçin.');
+      return;
+    }
+    // Convert display coords to original image coords
+    const srcX = cropRect.x / scale;
+    const srcY = cropRect.y / scale;
+    const srcW = cropRect.w / scale;
+    const srcH = cropRect.h / scale;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(srcW);
+    canvas.height = Math.round(srcH);
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(asset.imageEl, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH);
+    onApply(canvas.toDataURL('image/png'), Math.round(srcW), Math.round(srcH));
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/70 z-50" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl" style={{ maxWidth: '560px', width: '100%' }}>
+          {/* Header */}
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 className="text-base font-semibold text-gray-800">Edit Image — Crop</h3>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="p-5">
+            <p className="text-xs text-gray-500 mb-3">
+              Kırpmak istediğin alanı sürükleyerek seç, ardından <strong>Apply Crop</strong>'a tıkla.
+            </p>
+            <div className="flex justify-center">
+              <div
+                ref={containerRef}
+                className="relative select-none rounded-lg overflow-hidden border border-gray-200"
+                style={{ width: displayWidth, height: displayHeight, cursor: 'crosshair' }}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              >
+                <img
+                  src={asset.dataUrl}
+                  alt={asset.name}
+                  style={{ width: displayWidth, height: displayHeight, display: 'block' }}
+                  draggable={false}
+                />
+                {cropRect && cropRect.w > 2 && cropRect.h > 2 && (
+                  <div
+                    className="absolute border-2 border-white pointer-events-none"
+                    style={{
+                      left: cropRect.x,
+                      top: cropRect.y,
+                      width: cropRect.w,
+                      height: cropRect.h,
+                      boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)',
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+            {cropRect && cropRect.w > 2 && (
+              <p className="text-center text-xs text-gray-400 mt-2">
+                Seçim: {Math.round(cropRect.w / scale)} × {Math.round(cropRect.h / scale)} px
+              </p>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 border-t border-gray-200 bg-gray-50 rounded-b-2xl flex justify-between items-center">
+            <button
+              onClick={() => { setCropStart(null); setCropEnd(null); }}
+              className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+            >
+              Reset
+            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={onClose}
+                className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApplyCrop}
+                disabled={!cropRect || cropRect.w < 5 || cropRect.h < 5}
+                className="px-4 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-40"
+              >
+                Apply Crop
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+};
+
 export const LeftSidebar: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  
+  const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  const [heightInput, setHeightInput] = useState('');
+
   const {
     assets,
     items,
@@ -32,6 +188,32 @@ export const LeftSidebar: React.FC = () => {
     : null;
 
   const selectedAsset = selectedItem ? assets[selectedItem.assetId] : null;
+
+  // Sync heightInput only when the SELECTED ITEM changes (not on every height update)
+  useEffect(() => {
+    if (selectedItem) {
+      setHeightInput(pxToInches(selectedItem.height, dpi).toFixed(2));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedItem?.id, dpi]);
+
+  // Apply crop: replace asset with cropped version
+  const handleApplyCrop = useCallback(async (croppedDataUrl: string, newWidth: number, newHeight: number) => {
+    if (!editingAsset) return;
+    const img = new Image();
+    img.onload = () => {
+      const updatedAsset: Asset = {
+        ...editingAsset,
+        dataUrl: croppedDataUrl,
+        imageEl: img,
+        originalWidth: newWidth,
+        originalHeight: newHeight,
+      };
+      addAsset(updatedAsset);
+      setEditingAsset(null);
+    };
+    img.src = croppedDataUrl;
+  }, [editingAsset, addAsset]);
 
   // Handle file upload
   const handleFileUpload = useCallback(
@@ -207,6 +389,8 @@ export const LeftSidebar: React.FC = () => {
       const aspectRatio = selectedItem.width / selectedItem.height;
       const newHeightPx = newWidthPx / aspectRatio;
       updateItem(selectedItem.id, { width: newWidthPx, height: newHeightPx });
+      // Also update height input to reflect new proportional height
+      setHeightInput(pxToInches(newHeightPx, dpi).toFixed(2));
     } else {
       updateItem(selectedItem.id, { width: newWidthPx });
     }
@@ -251,6 +435,14 @@ export const LeftSidebar: React.FC = () => {
 
   return (
     <div className="w-72 bg-white border-r border-gray-200 flex flex-col h-full">
+      {/* Edit Image Modal */}
+      {editingAsset && (
+        <EditImageModal
+          asset={editingAsset}
+          onClose={() => setEditingAsset(null)}
+          onApply={handleApplyCrop}
+        />
+      )}
       {/* Upload Area */}
       <div className="p-4 border-b border-gray-100">
         <div
@@ -344,8 +536,12 @@ export const LeftSidebar: React.FC = () => {
                   </div>
 
                   {/* Edit button */}
-                  <button 
-                    className="w-full bg-blue-500 hover:bg-blue-600 text-white py-1.5 
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingAsset(asset);
+                    }}
+                    className="w-full bg-blue-500 hover:bg-blue-600 text-white py-1.5
                                rounded-lg text-xs font-medium transition-colors"
                   >
                     Edit Image
@@ -382,12 +578,19 @@ export const LeftSidebar: React.FC = () => {
                 <label className="block text-xs font-medium text-gray-500 mb-1">Height:</label>
                 <div className="flex items-center">
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={pxToInches(selectedItem.height, dpi).toFixed(2)}
-                    onChange={(e) => handleHeightChange(e.target.value)}
-                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm 
+                    type="text"
+                    inputMode="decimal"
+                    value={heightInput}
+                    onChange={(e) => setHeightInput(e.target.value)}
+                    onFocus={(e) => e.target.select()}
+                    onBlur={() => handleHeightChange(heightInput)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleHeightChange(heightInput);
+                        (e.target as HTMLInputElement).blur();
+                      }
+                    }}
+                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm
                                focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <span className="text-xs text-gray-400 ml-2 font-medium">in</span>
