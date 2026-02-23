@@ -14,7 +14,7 @@ import {
   isAuthenticated,
 } from '../services/storageAPI';
 
-const SHOPIFY_STORE_URL = import.meta.env.VITE_SHOPIFY_STORE_URL || 'https://gang-sheet-test1.myshopify.com/pages/gang-sheet-editor';
+const SHOPIFY_ACCOUNT_URL = import.meta.env.VITE_SHOPIFY_ACCOUNT_URL || 'https://gang-sheet-test1.myshopify.com/account';
 
 type TabType = 'All' | 'Draft' | 'In Cart' | 'Ordered' | 'Completed';
 type SidebarView = 'Welcome' | 'Designs' | 'Orders' | 'EditorSettings' | 'AdminSettings';
@@ -595,13 +595,13 @@ export const AdminPanel: React.FC = () => {
           </div>
           <h2 className="text-xl font-bold text-gray-800 mb-2">Erişim Kısıtlı</h2>
           <p className="text-gray-500 mb-6 text-sm">
-            Bu sayfaya yalnızca Shopify mağazamız üzerinden erişebilirsiniz. Lütfen mağazamıza giriş yapın.
+            Siparişlerinizi görüntülemek için Shopify hesabınıza giriş yapın, ardından <strong>Hesabım</strong> sayfasındaki <strong>"Gang Sheet Siparişlerim"</strong> butonuna tıklayın.
           </p>
           <a
-            href={SHOPIFY_STORE_URL}
+            href={SHOPIFY_ACCOUNT_URL}
             className="block w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-colors mb-3"
           >
-            Mağazaya Git
+            Hesabıma Git
           </a>
           <button
             onClick={() => setShowAdminLogin(true)}
