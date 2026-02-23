@@ -5,8 +5,13 @@ import { WelcomeDashboard } from '../components/Dashboard';
 import { EditorSettings, AdminSettings } from '../components/Settings';
 import { useCloudSync } from '../hooks';
 import type { OrderStatus, Order, GangSheetDesign } from '../types/order';
-
-const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+import {
+  getAdminOrdersFromCloud,
+  getAdminDesignsFromCloud,
+  updateAdminOrderStatus,
+  deleteAdminOrder,
+  deleteAdminDesign,
+} from '../services/storageAPI';
 
 type TabType = 'All' | 'Draft' | 'In Cart' | 'Ordered' | 'Completed';
 type SidebarView = 'Welcome' | 'Designs' | 'Orders' | 'EditorSettings' | 'AdminSettings';
@@ -311,6 +316,8 @@ const EditNameModal: React.FC<{
 export const AdminPanel: React.FC = () => {
   const navigate = useNavigate();
   const {
+    orders: myOrders,
+    designs: myDesigns,
     updateOrderStatus,
     deleteOrder,
     deleteDesign,
@@ -331,35 +338,79 @@ export const AdminPanel: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [sidebarView, setSidebarView] = useState<SidebarView>('Welcome');
 
-  // Admin data from backend (all customers)
+  // Admin mode state
+  const [adminMode, setAdminMode] = useState(() => !!localStorage.getItem('gang-sheet-admin-key'));
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [adminKeyInput, setAdminKeyInput] = useState('');
+  const [adminLoginError, setAdminLoginError] = useState('');
+
+  // Admin mode data (all customers)
   const [adminOrders, setAdminOrders] = useState<Order[]>([]);
   const [adminDesigns, setAdminDesigns] = useState<GangSheetDesign[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
 
+  // Active data source based on mode
+  const orders = adminMode ? adminOrders : myOrders;
+  const designs = adminMode ? adminDesigns : myDesigns;
+
   const loadAdminData = useCallback(async () => {
+    if (!adminMode) {
+      loadFromCloud();
+      return;
+    }
+    const key = localStorage.getItem('gang-sheet-admin-key');
+    if (!key) return;
     setAdminLoading(true);
     try {
-      const [ordersRes, designsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/storage/admin/orders`),
-        fetch(`${API_BASE_URL}/api/storage/admin/designs`),
+      const [fetchedOrders, fetchedDesigns] = await Promise.all([
+        getAdminOrdersFromCloud(key),
+        getAdminDesignsFromCloud(key),
       ]);
-      const ordersData = await ordersRes.json();
-      const designsData = await designsRes.json();
-      if (ordersData.success) setAdminOrders(ordersData.orders || []);
-      if (designsData.success) setAdminDesigns(designsData.designs || []);
+      setAdminOrders(fetchedOrders);
+      setAdminDesigns(fetchedDesigns);
     } catch (e) {
       console.error('Failed to load admin data:', e);
+      if (e instanceof Error && e.message === 'Unauthorized') {
+        localStorage.removeItem('gang-sheet-admin-key');
+        setAdminMode(false);
+      }
     } finally {
       setAdminLoading(false);
     }
-  }, []);
+  }, [adminMode, loadFromCloud]);
 
   useEffect(() => {
     loadAdminData();
   }, [loadAdminData]);
 
-  const orders = adminOrders;
-  const designs = adminDesigns;
+  const handleAdminLogin = async () => {
+    if (!adminKeyInput.trim()) return;
+    setAdminLoading(true);
+    setAdminLoginError('');
+    try {
+      const [fetchedOrders, fetchedDesigns] = await Promise.all([
+        getAdminOrdersFromCloud(adminKeyInput),
+        getAdminDesignsFromCloud(adminKeyInput),
+      ]);
+      localStorage.setItem('gang-sheet-admin-key', adminKeyInput);
+      setAdminOrders(fetchedOrders);
+      setAdminDesigns(fetchedDesigns);
+      setAdminMode(true);
+      setShowAdminLogin(false);
+      setAdminKeyInput('');
+    } catch {
+      setAdminLoginError('Geçersiz admin şifresi. Tekrar deneyin.');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleAdminLogout = () => {
+    localStorage.removeItem('gang-sheet-admin-key');
+    setAdminMode(false);
+    setAdminOrders([]);
+    setAdminDesigns([]);
+  };
 
   // Modal states
   const [viewDesign, setViewDesign] = useState<GangSheetDesign | null>(null);
@@ -431,8 +482,20 @@ export const AdminPanel: React.FC = () => {
     });
   };
 
-  const handleStatusChange = (orderId: string, newStatus: OrderStatus) => {
-    updateOrderStatus(orderId, newStatus);
+  const handleStatusChange = async (orderId: string, newStatus: OrderStatus) => {
+    if (adminMode) {
+      const order = adminOrders.find(o => o.id === orderId);
+      if (!order?.customerId) return;
+      const key = localStorage.getItem('gang-sheet-admin-key')!;
+      try {
+        await updateAdminOrderStatus(order.customerId, orderId, newStatus, key);
+        setAdminOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      } catch (e) {
+        console.error('Failed to update order status:', e);
+      }
+    } else {
+      updateOrderStatus(orderId, newStatus);
+    }
   };
 
   // Download design as PNG (uses full export if available, otherwise thumbnail)
@@ -486,14 +549,32 @@ export const AdminPanel: React.FC = () => {
   };
 
   // Confirm delete
-  const handleDeleteDesign = (design: GangSheetDesign) => {
-    if (confirm(`Are you sure you want to delete "${design.name}"?`)) {
+  const handleDeleteDesign = async (design: GangSheetDesign) => {
+    if (!confirm(`Are you sure you want to delete "${design.name}"?`)) return;
+    if (adminMode && design.customerId) {
+      const key = localStorage.getItem('gang-sheet-admin-key')!;
+      try {
+        await deleteAdminDesign(design.customerId, design.id, key);
+        setAdminDesigns(prev => prev.filter(d => d.id !== design.id));
+      } catch (e) {
+        console.error('Failed to delete design:', e);
+      }
+    } else {
       deleteDesign(design.id);
     }
   };
 
-  const handleDeleteOrder = (order: Order) => {
-    if (confirm(`Are you sure you want to delete order ${order.orderNumber}?`)) {
+  const handleDeleteOrder = async (order: Order) => {
+    if (!confirm(`Are you sure you want to delete order ${order.orderNumber}?`)) return;
+    if (adminMode && order.customerId) {
+      const key = localStorage.getItem('gang-sheet-admin-key')!;
+      try {
+        await deleteAdminOrder(order.customerId, order.id, key);
+        setAdminOrders(prev => prev.filter(o => o.id !== order.id));
+      } catch (e) {
+        console.error('Failed to delete order:', e);
+      }
+    } else {
       deleteOrder(order.id);
     }
   };
@@ -503,11 +584,50 @@ export const AdminPanel: React.FC = () => {
       {/* Modals */}
       <ViewModal design={viewDesign} onClose={() => setViewDesign(null)} />
       <OrderViewModal order={viewOrder} onClose={() => setViewOrder(null)} />
-      <EditNameModal 
-        design={editDesign} 
-        onClose={() => setEditDesign(null)} 
+      <EditNameModal
+        design={editDesign}
+        onClose={() => setEditDesign(null)}
         onSave={handleSaveDesignName}
       />
+
+      {/* Admin Login Modal */}
+      {showAdminLogin && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-1">Admin Girişi</h3>
+            <p className="text-sm text-gray-500 mb-4">Tüm müşterilerin verilerini görmek için admin şifresini girin.</p>
+            <input
+              type="password"
+              value={adminKeyInput}
+              onChange={(e) => setAdminKeyInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
+              placeholder="Admin şifresi..."
+              autoFocus
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm
+                         focus:outline-none focus:ring-2 focus:ring-purple-500 mb-2"
+            />
+            {adminLoginError && (
+              <p className="text-sm text-red-600 mb-2">{adminLoginError}</p>
+            )}
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => { setShowAdminLogin(false); setAdminKeyInput(''); setAdminLoginError(''); }}
+                className="flex-1 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                İptal
+              </button>
+              <button
+                onClick={handleAdminLogin}
+                disabled={adminLoading || !adminKeyInput.trim()}
+                className="flex-1 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg
+                           transition-colors disabled:opacity-50"
+              >
+                {adminLoading ? 'Kontrol ediliyor...' : 'Giriş Yap'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Sidebar */}
       <div className="w-56 bg-white border-r border-gray-200 flex flex-col">
@@ -632,6 +752,48 @@ export const AdminPanel: React.FC = () => {
             </div>
           </div>
 
+          {/* Admin / Customer Mode */}
+          <div className="mt-4 pt-4 border-t border-gray-200">
+            <div className="text-xs font-medium text-gray-400 px-3 mb-2">MOD</div>
+            {adminMode ? (
+              <div className="px-3">
+                <div className="flex items-center gap-2 px-2 py-1.5 bg-purple-50 rounded-lg mb-2">
+                  <span className="w-2 h-2 rounded-full bg-purple-500 flex-shrink-0" />
+                  <span className="text-xs font-medium text-purple-700">Admin Modu</span>
+                </div>
+                <button
+                  onClick={handleAdminLogout}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs
+                             text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  Admin'den Çık
+                </button>
+              </div>
+            ) : (
+              <div className="px-3">
+                <div className="flex items-center gap-2 px-2 py-1.5 bg-blue-50 rounded-lg mb-2">
+                  <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                  <span className="text-xs font-medium text-blue-700">Müşteri Modu</span>
+                </div>
+                <button
+                  onClick={() => setShowAdminLogin(true)}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs
+                             text-gray-600 hover:bg-gray-100 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
+                  Admin Girişi
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Sync Status */}
           <div className="mt-4 pt-4 border-t border-gray-200">
             <div className="text-xs font-medium text-gray-400 px-3 mb-2">CLOUD SYNC</div>
@@ -666,11 +828,11 @@ export const AdminPanel: React.FC = () => {
                 </div>
               )}
               <button
-                onClick={() => { loadFromCloud(); loadAdminData(); }}
+                onClick={() => loadAdminData()}
                 disabled={isCloudSyncing || adminLoading}
                 className="mt-2 w-full text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
               >
-                {adminLoading ? 'Loading...' : 'Refresh from cloud'}
+                {adminLoading ? 'Yükleniyor...' : 'Yenile'}
               </button>
             </div>
           </div>
@@ -696,9 +858,18 @@ export const AdminPanel: React.FC = () => {
           <>
             {/* Header */}
             <header className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6">
-              <h1 className="text-xl font-semibold text-gray-800">
-                {sidebarView === 'Designs' ? 'Designs' : 'Orders'}
-              </h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl font-semibold text-gray-800">
+                  {sidebarView === 'Designs'
+                    ? (adminMode ? 'All Designs' : 'My Designs')
+                    : (adminMode ? 'All Orders' : 'My Orders')}
+                </h1>
+                {adminMode && (
+                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">
+                    Admin
+                  </span>
+                )}
+              </div>
               <Link
                 to="/"
                 className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"

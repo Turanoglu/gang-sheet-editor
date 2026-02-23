@@ -17,6 +17,7 @@ export interface GangSheetDesign {
   fullExportUrl?: string; // Base64 - full resolution export for download
   canvasData: string; // JSON string of canvas items
   assetsData: string; // JSON string of assets
+  customerId?: string; // Attached by admin endpoints
 }
 
 export interface CartItem {
@@ -40,6 +41,7 @@ export interface Order {
   updatedAt: Date;
   notes?: string;
   product: string;
+  customerId?: string; // Attached by admin endpoints
 }
 
 // Price calculation based on board size

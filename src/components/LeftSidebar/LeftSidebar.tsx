@@ -165,6 +165,7 @@ export const LeftSidebar: React.FC = () => {
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
   const [widthInput, setWidthInput] = useState('');
   const [heightInput, setHeightInput] = useState('');
+  const [quantityInput, setQuantityInput] = useState(1);
 
   const {
     assets,
@@ -177,7 +178,6 @@ export const LeftSidebar: React.FC = () => {
     duplicateSelectedItems,
     autoFillSheet,
     dpi,
-    itemQuantities,
     setItemQuantity,
     applyQuantities,
     removeAsset,
@@ -190,6 +190,11 @@ export const LeftSidebar: React.FC = () => {
 
   const selectedAsset = selectedItem ? assets[selectedItem.assetId] : null;
 
+  // Actual count of canvas items for selected asset
+  const actualItemCount = selectedItem
+    ? items.filter(item => item.assetId === selectedItem.assetId).length
+    : 1;
+
   // Sync width/height inputs only when the SELECTED ITEM changes
   useEffect(() => {
     if (selectedItem) {
@@ -198,6 +203,12 @@ export const LeftSidebar: React.FC = () => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem?.id, dpi]);
+
+  // Sync quantityInput with actual item count when asset changes or items are added/removed
+  useEffect(() => {
+    setQuantityInput(actualItemCount);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedItem?.assetId, actualItemCount]);
 
   // Apply crop: replace asset with cropped version
   const handleApplyCrop = useCallback(async (croppedDataUrl: string, newWidth: number, newHeight: number) => {
@@ -695,14 +706,17 @@ export const LeftSidebar: React.FC = () => {
               <input
                 type="number"
                 min="1"
-                value={itemQuantities[selectedItem.assetId] || 1}
-                onChange={(e) => setItemQuantity(selectedItem.assetId, parseInt(e.target.value) || 1)}
-                className="flex-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm 
+                value={quantityInput}
+                onChange={(e) => setQuantityInput(parseInt(e.target.value) || 1)}
+                className="flex-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm
                            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <button
-                onClick={applyQuantities}
-                className="px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg 
+                onClick={() => {
+                  setItemQuantity(selectedItem.assetId, quantityInput);
+                  applyQuantities();
+                }}
+                className="px-3 py-1.5 bg-purple-500 hover:bg-purple-600 text-white rounded-lg
                            text-xs font-medium transition-colors"
                 title="Apply quantity to create copies"
               >

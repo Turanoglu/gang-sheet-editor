@@ -7,6 +7,7 @@ function getCustomerId(): string {
   // Check if embedded in Shopify and customer ID is available
   const shopifyCustomerId = (window as any).__SHOPIFY_CUSTOMER_ID__;
   if (shopifyCustomerId) {
+    localStorage.setItem('gang-sheet-customer-id', shopifyCustomerId);
     return shopifyCustomerId;
   }
 
@@ -14,16 +15,34 @@ function getCustomerId(): string {
   const urlParams = new URLSearchParams(window.location.search);
   const customerIdParam = urlParams.get('customerId');
   if (customerIdParam) {
+    // Persist to localStorage so it survives navigation (e.g. to /admin)
+    localStorage.setItem('gang-sheet-customer-id', customerIdParam);
+    const emailParam = urlParams.get('customerEmail');
+    if (emailParam) localStorage.setItem('gang-sheet-customer-email', emailParam);
     return customerIdParam;
   }
 
-  // Fallback to localStorage session ID for anonymous users
+  // Check persisted customer ID (set from a previous page load with URL params)
+  const savedCustomerId = localStorage.getItem('gang-sheet-customer-id');
+  if (savedCustomerId) return savedCustomerId;
+
+  // Fallback to anonymous session ID
   let sessionId = localStorage.getItem('gang-sheet-session-id');
   if (!sessionId) {
     sessionId = `anon-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     localStorage.setItem('gang-sheet-session-id', sessionId);
   }
   return sessionId;
+}
+
+export function getStoredCustomerId(): string {
+  return localStorage.getItem('gang-sheet-customer-id') ||
+         localStorage.getItem('gang-sheet-session-id') ||
+         'anonymous';
+}
+
+export function getStoredCustomerEmail(): string | null {
+  return localStorage.getItem('gang-sheet-customer-email');
 }
 
 // Helper for fetch with customer ID header
@@ -242,6 +261,62 @@ export async function getImageDownloadUrl(key: string): Promise<string> {
     console.error('Failed to get image download URL:', error);
     throw error;
   }
+}
+
+// ==================== ADMIN API ====================
+
+export async function getAdminOrdersFromCloud(adminKey: string): Promise<Order[]> {
+  const response = await fetch(`${API_BASE_URL}/api/storage/admin/orders`, {
+    headers: { 'X-Admin-Key': adminKey },
+  });
+  if (response.status === 401) throw new Error('Unauthorized');
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.json();
+  return data.orders || [];
+}
+
+export async function getAdminDesignsFromCloud(adminKey: string): Promise<GangSheetDesign[]> {
+  const response = await fetch(`${API_BASE_URL}/api/storage/admin/designs`, {
+    headers: { 'X-Admin-Key': adminKey },
+  });
+  if (response.status === 401) throw new Error('Unauthorized');
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.json();
+  return data.designs || [];
+}
+
+export async function updateAdminOrderStatus(
+  customerId: string, orderId: string, status: string, adminKey: string
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/storage/admin/orders/${customerId}/${orderId}/status`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+      body: JSON.stringify({ status }),
+    }
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
+export async function deleteAdminOrder(
+  customerId: string, orderId: string, adminKey: string
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/storage/admin/orders/${customerId}/${orderId}`,
+    { method: 'DELETE', headers: { 'X-Admin-Key': adminKey } }
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
+export async function deleteAdminDesign(
+  customerId: string, designId: string, adminKey: string
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/storage/admin/designs/${customerId}/${designId}`,
+    { method: 'DELETE', headers: { 'X-Admin-Key': adminKey } }
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
 }
 
 // ==================== SYNC UTILITY ====================

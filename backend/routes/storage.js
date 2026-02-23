@@ -23,11 +23,22 @@ const BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
 // Helper: Get customer ID from request (from Shopify)
 const getCustomerId = (req) => {
-  // Customer ID can come from header, query, or body
   return req.headers['x-shopify-customer-id'] ||
          req.query.customerId ||
          req.body?.customerId ||
          'anonymous';
+};
+
+// Admin auth middleware
+const requireAdminKey = (req, res, next) => {
+  const adminKey = req.headers['x-admin-key'];
+  if (!process.env.ADMIN_SECRET_KEY) {
+    return res.status(500).json({ error: 'Admin key not configured on server' });
+  }
+  if (!adminKey || adminKey !== process.env.ADMIN_SECRET_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
 };
 
 // Helper: Convert stream to string
@@ -373,7 +384,7 @@ router.post('/upload-image', async (req, res) => {
 // ==================== ADMIN ENDPOINTS ====================
 
 // Get ALL orders from ALL customers (admin only)
-router.get('/admin/orders', async (req, res) => {
+router.get('/admin/orders', requireAdminKey, async (req, res) => {
   try {
     const listResponse = await s3Client.send(new ListObjectsV2Command({
       Bucket: BUCKET_NAME,
@@ -410,7 +421,7 @@ router.get('/admin/orders', async (req, res) => {
 });
 
 // Get ALL designs from ALL customers (admin only)
-router.get('/admin/designs', async (req, res) => {
+router.get('/admin/designs', requireAdminKey, async (req, res) => {
   try {
     const listResponse = await s3Client.send(new ListObjectsV2Command({
       Bucket: BUCKET_NAME,
@@ -442,6 +453,60 @@ router.get('/admin/designs', async (req, res) => {
   } catch (error) {
     console.error('Error fetching all designs:', error);
     res.status(500).json({ error: 'Failed to fetch designs', message: error.message });
+  }
+});
+
+// ==================== ADMIN CRUD ====================
+
+// Admin: update any customer's order status
+router.patch('/admin/orders/:customerId/:orderId/status', requireAdminKey, async (req, res) => {
+  try {
+    const { customerId, orderId } = req.params;
+    const { status } = req.body;
+    const key = `users/${customerId}/orders/${orderId}.json`;
+
+    const getResponse = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key }));
+    const bodyContents = await streamToString(getResponse.Body);
+    const order = JSON.parse(bodyContents);
+
+    order.status = status;
+    order.updatedAt = new Date().toISOString();
+
+    await s3Client.send(new PutObjectCommand({
+      Bucket: BUCKET_NAME, Key: key,
+      Body: JSON.stringify(order), ContentType: 'application/json',
+    }));
+
+    res.json({ success: true, order });
+  } catch (error) {
+    console.error('Error updating order status (admin):', error);
+    res.status(500).json({ error: 'Failed to update order status', message: error.message });
+  }
+});
+
+// Admin: delete any customer's order
+router.delete('/admin/orders/:customerId/:orderId', requireAdminKey, async (req, res) => {
+  try {
+    const { customerId, orderId } = req.params;
+    const key = `users/${customerId}/orders/${orderId}.json`;
+    await s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: key }));
+    res.json({ success: true, orderId });
+  } catch (error) {
+    console.error('Error deleting order (admin):', error);
+    res.status(500).json({ error: 'Failed to delete order', message: error.message });
+  }
+});
+
+// Admin: delete any customer's design
+router.delete('/admin/designs/:customerId/:designId', requireAdminKey, async (req, res) => {
+  try {
+    const { customerId, designId } = req.params;
+    const key = `users/${customerId}/designs/${designId}.json`;
+    await s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: key }));
+    res.json({ success: true, designId });
+  } catch (error) {
+    console.error('Error deleting design (admin):', error);
+    res.status(500).json({ error: 'Failed to delete design', message: error.message });
   }
 });
 
