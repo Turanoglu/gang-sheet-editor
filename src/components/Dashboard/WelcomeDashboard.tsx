@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useOrderStore } from '../../store/orderStore';
-import type { OrderStatus } from '../../types/order';
+import type { OrderStatus, Order, GangSheetDesign } from '../../types/order';
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
   'Draft': 'bg-gray-100 text-gray-600',
@@ -141,8 +141,8 @@ const DonutChart: React.FC<{
 };
 
 interface WelcomeDashboardProps {
-  orders?: ReturnType<typeof useOrderStore>['orders'];
-  designs?: ReturnType<typeof useOrderStore>['designs'];
+  orders?: Order[];
+  designs?: GangSheetDesign[];
 }
 
 export const WelcomeDashboard: React.FC<WelcomeDashboardProps> = ({ orders: propOrders, designs: propDesigns }) => {
