@@ -582,71 +582,42 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
-  // Access gate: if not authenticated via Shopify and not admin mode, block access
-  if (!isAuthenticated() && !adminMode) {
+  // Access gate: admin panel requires admin key (not Shopify auth)
+  if (!adminMode) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">Erişim Kısıtlı</h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Admin Paneli</h2>
           <p className="text-gray-500 mb-6 text-sm">
-            Siparişlerinizi görüntülemek için Shopify hesabınıza giriş yapın, ardından <strong>Hesabım</strong> sayfasındaki <strong>"Gang Sheet Siparişlerim"</strong> butonuna tıklayın.
+            Admin şifrenizi girerek tüm müşteri verilerine erişebilirsiniz.
           </p>
-          <a
-            href={SHOPIFY_ACCOUNT_URL}
-            className="block w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-colors mb-3"
-          >
-            Hesabıma Git
-          </a>
+          <input
+            type="password"
+            value={adminKeyInput}
+            onChange={(e) => setAdminKeyInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
+            placeholder="Admin şifresi..."
+            autoFocus
+            className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+                       focus:outline-none focus:ring-2 focus:ring-purple-500 mb-3"
+          />
+          {adminLoginError && <p className="text-sm text-red-600 mb-3">{adminLoginError}</p>}
           <button
-            onClick={() => setShowAdminLogin(true)}
-            className="block w-full text-sm text-gray-500 hover:text-gray-700 py-2 transition-colors"
+            onClick={handleAdminLogin}
+            disabled={adminLoading || !adminKeyInput.trim()}
+            className="w-full py-3 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-xl
+                       transition-colors disabled:opacity-50 font-medium"
           >
-            Admin Girişi
+            {adminLoading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
           </button>
         </div>
 
-        {/* Admin Login Modal (still accessible from gate) */}
-        {showAdminLogin && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-1">Admin Girişi</h3>
-              <p className="text-sm text-gray-500 mb-4">Tüm müşterilerin verilerini görmek için admin şifresini girin.</p>
-              <input
-                type="password"
-                value={adminKeyInput}
-                onChange={(e) => setAdminKeyInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
-                placeholder="Admin şifresi..."
-                autoFocus
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm
-                           focus:outline-none focus:ring-2 focus:ring-purple-500 mb-2"
-              />
-              {adminLoginError && <p className="text-sm text-red-600 mb-2">{adminLoginError}</p>}
-              <div className="flex gap-2 mt-2">
-                <button
-                  onClick={() => { setShowAdminLogin(false); setAdminKeyInput(''); setAdminLoginError(''); }}
-                  className="flex-1 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                  İptal
-                </button>
-                <button
-                  onClick={handleAdminLogin}
-                  disabled={adminLoading || !adminKeyInput.trim()}
-                  className="flex-1 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg
-                             transition-colors disabled:opacity-50"
-                >
-                  {adminLoading ? 'Kontrol ediliyor...' : 'Giriş Yap'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
