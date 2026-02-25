@@ -11,10 +11,7 @@ import {
   updateAdminOrderStatus,
   deleteAdminOrder,
   deleteAdminDesign,
-  isAuthenticated,
 } from '../services/storageAPI';
-
-const SHOPIFY_ACCOUNT_URL = import.meta.env.VITE_SHOPIFY_ACCOUNT_URL || 'https://gang-sheet-test1.myshopify.com/account';
 
 type TabType = 'All' | 'Draft' | 'In Cart' | 'Ordered' | 'Completed';
 type SidebarView = 'Welcome' | 'Designs' | 'Orders' | 'EditorSettings' | 'AdminSettings';
