@@ -11,7 +11,10 @@ import {
   updateOrderStatusInCloud,
   deleteOrderFromCloud,
   uploadImageToCloud,
+  getStoredCustomerId,
 } from '../services/storageAPI';
+
+const LAST_CUSTOMER_KEY = 'gang-sheet-last-customer-id';
 
 // Generate order number
 function generateOrderNumber(): string {
@@ -81,6 +84,14 @@ export const useOrderStore = create<ExtendedOrderStore>()(
 
       // Load data from cloud (call on app init)
       loadFromCloud: async () => {
+        // Customer isolation: if customer changed since last load, wipe local data
+        const currentCustomerId = getStoredCustomerId();
+        const lastCustomerId = localStorage.getItem(LAST_CUSTOMER_KEY);
+        if (lastCustomerId && lastCustomerId !== currentCustomerId) {
+          set({ designs: [], orders: [] });
+        }
+        localStorage.setItem(LAST_CUSTOMER_KEY, currentCustomerId);
+
         set({ isCloudSyncing: true, cloudSyncError: null });
         try {
           const [cloudDesigns, cloudOrders] = await Promise.all([

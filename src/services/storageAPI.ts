@@ -2,6 +2,22 @@ import type { GangSheetDesign, Order } from '../types/order';
 
 const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
 
+// Listen for customer data posted from Shopify parent window (iframe embedding)
+if (typeof window !== 'undefined') {
+  window.addEventListener('message', (event) => {
+    if (event.origin !== 'https://gang-sheet-test1.myshopify.com') return;
+    if (event.data?.type !== 'SHOPIFY_CUSTOMER') return;
+    const { customerId, customerEmail } = event.data;
+    if (customerId) {
+      localStorage.setItem('gang-sheet-customer-id', String(customerId));
+      (window as any).__SHOPIFY_CUSTOMER_ID__ = String(customerId);
+    }
+    if (customerEmail) {
+      localStorage.setItem('gang-sheet-customer-email', customerEmail);
+    }
+  });
+}
+
 // Get customer ID from Shopify (will be passed from parent window when embedded)
 function getCustomerId(): string {
   // Check if embedded in Shopify and customer ID is available

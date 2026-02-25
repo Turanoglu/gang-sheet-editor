@@ -916,7 +916,7 @@ export const AdminPanel: React.FC = () => {
         {/* Show content based on sidebar selection */}
         {sidebarView === 'Welcome' ? (
           <div className="flex-1 overflow-auto bg-gray-50">
-            <WelcomeDashboard />
+            <WelcomeDashboard orders={orders} designs={designs} />
           </div>
         ) : sidebarView === 'EditorSettings' ? (
           <div className="flex-1 overflow-auto bg-gray-50">

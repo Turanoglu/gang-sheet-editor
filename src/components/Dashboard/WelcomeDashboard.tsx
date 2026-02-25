@@ -140,8 +140,15 @@ const DonutChart: React.FC<{
   );
 };
 
-export const WelcomeDashboard: React.FC = () => {
-  const { orders, designs } = useOrderStore();
+interface WelcomeDashboardProps {
+  orders?: ReturnType<typeof useOrderStore>['orders'];
+  designs?: ReturnType<typeof useOrderStore>['designs'];
+}
+
+export const WelcomeDashboard: React.FC<WelcomeDashboardProps> = ({ orders: propOrders, designs: propDesigns }) => {
+  const { orders: storeOrders, designs: storeDesigns } = useOrderStore();
+  const orders = propOrders ?? storeOrders;
+  const designs = propDesigns ?? storeDesigns;
 
   // Calculate statistics
   const stats = useMemo(() => {
