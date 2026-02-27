@@ -568,7 +568,7 @@ export const LeftSidebar: React.FC = () => {
 
       {/* Selected Item Properties */}
       {selectedItem && (
-        <div className="border-t border-gray-200 p-4 bg-gray-50 space-y-4">
+        <div className="border-t border-gray-200 p-4 bg-gray-50 space-y-4 overflow-y-auto max-h-[50vh] shrink-0">
           {/* Dimensions */}
           <div>
             <div className="grid grid-cols-2 gap-3">
