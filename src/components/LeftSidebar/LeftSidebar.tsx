@@ -457,22 +457,30 @@ export const LeftSidebar: React.FC = () => {
         />
       )}
       {/* Upload Area */}
-      <div className="p-2 border-b border-gray-100">
+      <div className="p-3 border-b border-gray-100">
         <div
           onClick={() => fileInputRef.current?.click()}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-lg p-2 text-center cursor-pointer transition-all group
+          className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all group
             ${isDragOver
               ? 'border-blue-500 bg-blue-100 scale-105'
               : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/50'
             }`}
         >
-          <button className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors w-full">
+          <div className="w-8 h-8 mx-auto mb-1 rounded-full bg-gray-100 group-hover:bg-blue-100
+                          flex items-center justify-center transition-colors">
+            <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+          </div>
+          <p className="text-[10px] text-gray-500 mb-1">Drag & drop or click to upload</p>
+          <button className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-medium transition-colors">
             📤 Upload Image(s)
           </button>
-          <p className="text-[10px] text-gray-400 mt-1">
+          <p className="text-[9px] text-gray-400 mt-1">
             png, webp, jpg, jpeg, svg, psd, ai, eps, pdf
           </p>
         </div>
