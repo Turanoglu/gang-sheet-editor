@@ -48,13 +48,13 @@ export interface Order {
 export const BOARD_PRICES: Record<string, number> = {
   '22x24': 18.99,
   '22x36': 29.99,
-  '22x48': 39.99,
-  '22x60': 49.99,
-  '22x84': 69.99,
-  '22x108': 89.99,
-  '22x120': 99.99,
-  '22x180': 149.99,
-  '22x240': 199.99,
+  '22x48': 34.99,
+  '22x60': 39.99,
+  '22x84': 49.99,
+  '22x108': 59.99,
+  '22x120': 69.99,
+  '22x180': 89.99,
+  '22x240': 119.99,
 };
 
 export function getPriceForBoard(width: number, height: number): number {
