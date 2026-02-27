@@ -143,9 +143,10 @@ const DonutChart: React.FC<{
 interface WelcomeDashboardProps {
   orders?: Order[];
   designs?: GangSheetDesign[];
+  adminMode?: boolean;
 }
 
-export const WelcomeDashboard: React.FC<WelcomeDashboardProps> = ({ orders: propOrders, designs: propDesigns }) => {
+export const WelcomeDashboard: React.FC<WelcomeDashboardProps> = ({ orders: propOrders, designs: propDesigns, adminMode }) => {
   const { orders: storeOrders, designs: storeDesigns } = useOrderStore();
   const orders = propOrders ?? storeOrders;
   const designs = propDesigns ?? storeDesigns;
@@ -194,14 +195,21 @@ export const WelcomeDashboard: React.FC<WelcomeDashboardProps> = ({ orders: prop
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-800">Welcome to Build a Gang Sheet</h1>
+      <div className="flex items-center gap-3">
+        <h1 className="text-2xl font-bold text-gray-800">
+          {adminMode ? 'Shop Dashboard' : 'My Dashboard'}
+        </h1>
+        {adminMode && (
+          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs font-medium rounded-full">Admin</span>
+        )}
       </div>
 
-      {/* Shop Statistics */}
+      {/* Statistics */}
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-700">Shop Statistics</h2>
+          <h2 className="text-lg font-semibold text-gray-700">
+            {adminMode ? 'Shop Statistics' : 'My Statistics'}
+          </h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
