@@ -3,10 +3,14 @@ import { EditorPage, AdminPanel } from './pages';
 import { isAuthenticated } from './services/storageAPI';
 import './App.css';
 
-const SHOPIFY_STORE_URL = import.meta.env.VITE_SHOPIFY_STORE_URL || 'https://gang-sheet-test1.myshopify.com/pages/gang-sheet-editor';
+const SHOPIFY_STORE_URL = import.meta.env.VITE_SHOPIFY_STORE_URL || 'https://www.inkdyno.com/pages/gang-sheet-sample';
 
 function ShopifyAuthGate({ children }: { children: React.ReactNode }) {
-  if (!isAuthenticated()) {
+  // Allow anonymous access when embedded in Shopify (shop param present in URL)
+  const urlParams = new URLSearchParams(window.location.search);
+  const isEmbedded = !!urlParams.get('shop');
+
+  if (!isEmbedded && !isAuthenticated()) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center">
