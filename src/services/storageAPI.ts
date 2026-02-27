@@ -5,7 +5,12 @@ const API_BASE_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
 // Listen for customer data posted from Shopify parent window (iframe embedding)
 if (typeof window !== 'undefined') {
   window.addEventListener('message', (event) => {
-    if (event.origin !== 'https://gang-sheet-test1.myshopify.com') return;
+    const allowedOrigins = [
+      'https://n9e1pw-qr.myshopify.com',
+      'https://www.inkdyno.com',
+      'https://inkdyno.com',
+    ];
+    if (!allowedOrigins.includes(event.origin)) return;
     if (event.data?.type !== 'SHOPIFY_CUSTOMER') return;
     const { customerId, customerEmail } = event.data;
     if (customerId) {
