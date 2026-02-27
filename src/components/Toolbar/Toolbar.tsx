@@ -1,6 +1,7 @@
 import React from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import { BOARD_SIZES } from '../../types';
+import { getCustomerId } from '../../services/storageAPI';
 
 interface ToolbarProps {
   // No props needed anymore
@@ -260,6 +261,23 @@ export const Toolbar: React.FC<ToolbarProps> = () => {
 
       {/* Spacer */}
       <div className="flex-1" />
+
+      {/* My Panel */}
+      <div className="flex items-center gap-2 pr-3 border-r border-gray-200">
+        <button
+          onClick={() => {
+            const customerId = getCustomerId();
+            window.open(`/admin?customerId=${customerId}`, '_blank');
+          }}
+          title="Tasarımlarım ve Siparişlerim"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-gray-100 hover:bg-gray-200 text-gray-700"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+          Siparişlerim
+        </button>
+      </div>
 
       {/* Zoom */}
       <div className="flex items-center gap-2 pr-3 border-r border-gray-200">

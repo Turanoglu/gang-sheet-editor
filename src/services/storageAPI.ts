@@ -19,7 +19,7 @@ if (typeof window !== 'undefined') {
 }
 
 // Get customer ID from Shopify (will be passed from parent window when embedded)
-function getCustomerId(): string {
+export function getCustomerId(): string {
   // Check if embedded in Shopify and customer ID is available
   const shopifyCustomerId = (window as any).__SHOPIFY_CUSTOMER_ID__;
   if (shopifyCustomerId) {
