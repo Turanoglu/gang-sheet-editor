@@ -457,34 +457,23 @@ export const LeftSidebar: React.FC = () => {
         />
       )}
       {/* Upload Area */}
-      <div className="p-4 border-b border-gray-100">
+      <div className="p-2 border-b border-gray-100">
         <div
           onClick={() => fileInputRef.current?.click()}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all group
-            ${isDragOver 
-              ? 'border-blue-500 bg-blue-100 scale-105' 
+          className={`border-2 border-dashed rounded-lg p-2 text-center cursor-pointer transition-all group
+            ${isDragOver
+              ? 'border-blue-500 bg-blue-100 scale-105'
               : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50/50'
             }`}
         >
-          <div className="w-10 h-10 mx-auto mb-2 rounded-full bg-gray-100 group-hover:bg-blue-100 
-                          flex items-center justify-center transition-colors">
-            <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-            </svg>
-          </div>
-          <p className="text-xs text-gray-500 mb-2">
-            Drag & drop a file here, or click to
-          </p>
-          <button className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors">
+          <button className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-colors w-full">
             📤 Upload Image(s)
           </button>
-          <p className="text-[10px] text-gray-400 mt-2 leading-relaxed">
-            Upload images larger than 300 x 300px.<br />
-            Supported formats: png, webp, jpg, jpeg, svg, psd, ai, eps, pdf
+          <p className="text-[10px] text-gray-400 mt-1">
+            png, webp, jpg, jpeg, svg, psd, ai, eps, pdf
           </p>
         </div>
         <input
@@ -539,26 +528,26 @@ export const LeftSidebar: React.FC = () => {
                     {itemCount}
                   </span>
 
-                  {/* Thumbnail */}
-                  <div className="bg-gray-50 rounded-lg p-2 mb-2">
-                    <img
-                      src={asset.dataUrl}
-                      alt={asset.name}
-                      className="w-full h-24 object-contain"
-                    />
+                  {/* Thumbnail + Edit button row */}
+                  <div className="flex items-center gap-2">
+                    <div className="bg-gray-50 rounded-lg p-1 flex-1">
+                      <img
+                        src={asset.dataUrl}
+                        alt={asset.name}
+                        className="w-full h-14 object-contain"
+                      />
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingAsset(asset);
+                      }}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1
+                                 rounded-lg text-[10px] font-medium transition-colors whitespace-nowrap"
+                    >
+                      Edit<br/>Image
+                    </button>
                   </div>
-
-                  {/* Edit button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingAsset(asset);
-                    }}
-                    className="w-full bg-blue-500 hover:bg-blue-600 text-white py-1.5
-                               rounded-lg text-xs font-medium transition-colors"
-                  >
-                    Edit Image
-                  </button>
                 </div>
               );
             })}
@@ -568,7 +557,7 @@ export const LeftSidebar: React.FC = () => {
 
       {/* Selected Item Properties */}
       {selectedItem && (
-        <div className="border-t border-gray-200 p-4 bg-gray-50 space-y-4 overflow-y-auto max-h-[50vh] shrink-0">
+        <div className="border-t border-gray-200 p-2 bg-gray-50 space-y-2 overflow-y-auto shrink-0">
           {/* Dimensions */}
           <div>
             <div className="grid grid-cols-2 gap-3">
@@ -652,46 +641,28 @@ export const LeftSidebar: React.FC = () => {
               const quality = getResolutionQuality(avgResolution);
 
               return (
-                <div className="mt-3 p-3 bg-white rounded-lg border border-gray-200">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-medium text-gray-600">Resolution:</span>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${quality.color} ${quality.textColor}`}>
+                <div className="mt-2 p-2 bg-white rounded-lg border border-gray-200">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-gray-600">Resolution:</span>
+                    <span className={`text-xs font-bold ${quality.textColor}`}>{avgResolution} DPI</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${quality.color} ${quality.textColor}`}>
                       {quality.label}
                     </span>
                   </div>
-                  <div className="flex items-center justify-center gap-2">
-                    <span className={`text-2xl font-bold ${quality.textColor}`}>
-                      {avgResolution}
-                    </span>
-                    <span className="text-sm text-gray-500">DPI</span>
+                  <div className="mt-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        avgResolution >= 300 ? 'bg-green-500' :
+                        avgResolution >= 200 ? 'bg-blue-500' :
+                        avgResolution >= 150 ? 'bg-yellow-500' :
+                        avgResolution >= 100 ? 'bg-orange-500' : 'bg-red-500'
+                      }`}
+                      style={{ width: `${Math.min(100, (avgResolution / 300) * 100)}%` }}
+                    />
                   </div>
-                  <div className="mt-2 text-[10px] text-gray-400 text-center">
-                    Original: {selectedAssetData.originalWidth} × {selectedAssetData.originalHeight}px
-                  </div>
-                  
-                  {/* Resolution Bar */}
-                  <div className="mt-2">
-                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-300 ${
-                          avgResolution >= 300 ? 'bg-green-500' :
-                          avgResolution >= 200 ? 'bg-blue-500' :
-                          avgResolution >= 150 ? 'bg-yellow-500' :
-                          avgResolution >= 100 ? 'bg-orange-500' : 'bg-red-500'
-                        }`}
-                        style={{ width: `${Math.min(100, (avgResolution / 300) * 100)}%` }}
-                      />
-                    </div>
-                    <div className="flex justify-between mt-1 text-[9px] text-gray-400">
-                      <span>Low</span>
-                      <span>300 DPI</span>
-                    </div>
-                  </div>
-                  
-                  {/* Warning if resolution is too low */}
                   {avgResolution < 150 && (
-                    <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-[10px] text-red-600">
-                      ⚠️ Low resolution may result in blurry prints. Consider reducing the image size.
+                    <div className="mt-1 text-[10px] text-red-600">
+                      ⚠️ Low resolution may result in blurry prints.
                     </div>
                   )}
                 </div>
