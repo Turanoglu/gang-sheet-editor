@@ -332,6 +332,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
 /* Select styles */
 select {
+  appearance: none;
   background-repeat: no-repeat;
   background-position: right 0.5rem center;
   background-size: 1.5em 1.5em;
