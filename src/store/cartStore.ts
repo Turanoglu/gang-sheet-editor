@@ -71,6 +71,20 @@ export const useCartStore = create<CartStore>()(
     }),
     {
       name: 'gang-sheet-cart',
+      // Strip heavy base64 fields before saving to localStorage (prevents quota exceeded errors)
+      partialize: (state) => ({
+        isOpen: state.isOpen,
+        items: state.items.map((item) => ({
+          ...item,
+          design: {
+            ...item.design,
+            thumbnailUrl: '',      // base64 thumbnail - too large to persist
+            fullExportUrl: '',     // base64 full export - too large to persist
+            canvasData: '',        // canvas JSON - regenerated from R2 when needed
+            assetsData: '',        // assets JSON - regenerated from R2 when needed
+          },
+        })),
+      }),
     }
   )
 );
