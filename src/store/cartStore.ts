@@ -1,8 +1,29 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import type { CartStore, GangSheetDesign, CartItem } from '../types/order';
 import { getPriceForBoard } from '../types/order';
+
+// Safe localStorage wrapper: clears the key and retries if QuotaExceededError
+const safeStorage = createJSONStorage(() => ({
+  getItem: (name: string) => {
+    try { return localStorage.getItem(name); } catch { return null; }
+  },
+  setItem: (name: string, value: string) => {
+    try {
+      localStorage.setItem(name, value);
+    } catch (e) {
+      if (e instanceof Error && (e.name === 'QuotaExceededError' || e.message.includes('quota'))) {
+        console.warn('[cartStore] localStorage quota exceeded, clearing and retrying...');
+        try { localStorage.removeItem(name); } catch {}
+        try { localStorage.setItem(name, value); } catch {}
+      }
+    }
+  },
+  removeItem: (name: string) => {
+    try { localStorage.removeItem(name); } catch {}
+  },
+}));
 
 export const useCartStore = create<CartStore>()(
   persist(
@@ -71,6 +92,7 @@ export const useCartStore = create<CartStore>()(
     }),
     {
       name: 'gang-sheet-cart',
+      storage: safeStorage,
       // Strip heavy base64 fields before saving to localStorage (prevents quota exceeded errors)
       partialize: (state) => ({
         isOpen: state.isOpen,
