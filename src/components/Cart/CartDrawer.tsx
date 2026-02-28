@@ -1,55 +1,90 @@
 import React, { useState } from 'react';
 import { useCartStore } from '../../store/cartStore';
 import { useOrderStore } from '../../store/orderStore';
-import { createShopifyOrder } from '../../services/shopifyAPI';
+import { getVariantId, areVariantsConfigured } from '../../config/shopifyVariants';
+
+// Detect if the editor is embedded inside an iframe (e.g. inkdyno.com)
+const isEmbedded = (): boolean => {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true; // cross-origin parent → assume embedded
+  }
+};
 
 export const CartDrawer: React.FC = () => {
   const { items, isOpen, closeCart, removeFromCart, updateQuantity, getTotal, clearCart } = useCartStore();
   const { createOrder } = useOrderStore();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutStatus, setCheckoutStatus] = useState<string>('');
 
   const handleCheckout = async () => {
     if (items.length === 0) return;
 
     setIsCheckingOut(true);
+    setCheckoutStatus('Preparing order...');
 
     try {
-      // Send order to Shopify
-      const response = await createShopifyOrder(items);
+      if (isEmbedded() && areVariantsConfigured()) {
+        // ── Shopify Cart API via postMessage ──────────────────────────
+        const lineItems = items.map(item => {
+          const variantId = getVariantId(
+            item.design.boardSize.width,
+            item.design.boardSize.height
+          );
+          if (!variantId) {
+            throw new Error(
+              `No Shopify variant configured for ${item.design.boardSize.label}. ` +
+              `Please update src/config/shopifyVariants.ts.`
+            );
+          }
+          return {
+            variantId,
+            quantity: item.quantity,
+            properties: {
+              'Design Name': item.design.name,
+              'Board Size': item.design.boardSize.label,
+              'Images Count': String(item.design.imageCount),
+              ...(item.design.thumbnailUrl
+                ? { 'Preview': item.design.thumbnailUrl }
+                : {}),
+            },
+          };
+        });
 
-      if (response.success && response.order) {
-        // Also save to local storage
-        const localOrder = createOrder('Guest Customer', items);
-
-        // Clear cart after successful checkout
+        // Save order locally before redirecting
+        createOrder('Shopify Customer', items);
         clearCart();
         closeCart();
 
-        // Show success message
-        alert(
-          `✅ Order created successfully!\n\n` +
-          `Shopify Order: ${response.order.name}\n` +
-          `Local Order: ${localOrder.orderNumber}\n` +
-          `Total: $${response.order.totalPrice}\n\n` +
-          `You can view your order in:\n` +
-          `• Shopify Admin Dashboard\n` +
-          `• Local Admin Panel`
+        setCheckoutStatus('Redirecting to checkout...');
+
+        // Send message to parent (inkdyno.com Liquid template)
+        window.parent.postMessage(
+          { type: 'gang-sheet-checkout', items: lineItems },
+          '*'
         );
+
       } else {
-        throw new Error(response.error || 'Failed to create order');
+        // ── Standalone / fallback: just save locally ──────────────────
+        createOrder('Guest Customer', items);
+        clearCart();
+        closeCart();
+        alert(
+          '✅ Order saved!\n\n' +
+          'To enable direct Shopify checkout, open the editor inside inkdyno.com ' +
+          'and configure Shopify variant IDs in src/config/shopifyVariants.ts.'
+        );
       }
     } catch (error) {
       console.error('Checkout error:', error);
       alert(
-        `❌ Failed to create order in Shopify!\n\n` +
-        `Error: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
-        `Please check:\n` +
-        `• Backend server is running (localhost:3000)\n` +
-        `• SHOPIFY_ACCESS_TOKEN is set in backend/.env\n` +
-        `• Shopify API credentials are correct`
+        `❌ Checkout failed!\n\n` +
+        `${error instanceof Error ? error.message : 'Unknown error'}`
       );
     } finally {
       setIsCheckingOut(false);
+      setCheckoutStatus('');
     }
   };
 
@@ -209,7 +244,7 @@ export const CartDrawer: React.FC = () => {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Creating Order...
+                  {checkoutStatus || 'Processing...'}
                 </span>
               ) : (
                 'Proceed to Checkout'
