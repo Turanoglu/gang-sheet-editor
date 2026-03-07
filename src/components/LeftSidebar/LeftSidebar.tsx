@@ -568,10 +568,10 @@ export const LeftSidebar: React.FC = () => {
         <div className="border-t border-gray-200 p-2 bg-gray-50 space-y-2 overflow-y-auto shrink-0">
           {/* Dimensions */}
           <div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Width:</label>
-                <div className="flex items-center">
+                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
                   <input
                     type="text"
                     inputMode="decimal"
@@ -585,15 +585,14 @@ export const LeftSidebar: React.FC = () => {
                         (e.target as HTMLInputElement).blur();
                       }
                     }}
-                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm
-                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="flex-1 min-w-0 px-2 py-1.5 text-sm focus:outline-none"
                   />
-                  <span className="text-xs text-gray-400 ml-2 font-medium">in</span>
+                  <span className="text-xs text-gray-400 pr-1.5 font-medium shrink-0">in</span>
                 </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1">Height:</label>
-                <div className="flex items-center">
+                <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
                   <input
                     type="text"
                     inputMode="decimal"
@@ -607,10 +606,9 @@ export const LeftSidebar: React.FC = () => {
                         (e.target as HTMLInputElement).blur();
                       }
                     }}
-                    className="flex-1 px-2 py-1.5 border border-gray-300 rounded-lg text-sm
-                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="flex-1 min-w-0 px-2 py-1.5 text-sm focus:outline-none"
                   />
-                  <span className="text-xs text-gray-400 ml-2 font-medium">in</span>
+                  <span className="text-xs text-gray-400 pr-1.5 font-medium shrink-0">in</span>
                 </div>
               </div>
             </div>
