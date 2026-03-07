@@ -13,6 +13,7 @@ import { useOrderStore } from '../store/orderStore';
 import type { GangSheetDesign } from '../types/order';
 import { getPriceForBoard } from '../types/order';
 import { generateCleanExport } from '../utils/export';
+import { getCustomerInitials } from '../services/storageAPI';
 
 export const EditorPage: React.FC = () => {
   const stageRef = useRef<Konva.Stage | null>(null);
@@ -230,8 +231,8 @@ export const EditorPage: React.FC = () => {
             )}
           </button>
 
-          <div className="w-9 h-9 bg-gray-200 rounded-full flex items-center justify-center">
-            <span className="text-sm font-medium text-gray-500">UN</span>
+          <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+            <span className="text-sm font-bold text-white">{getCustomerInitials()}</span>
           </div>
         </div>
       </div>

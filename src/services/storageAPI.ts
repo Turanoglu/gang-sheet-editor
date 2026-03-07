@@ -12,13 +12,16 @@ if (typeof window !== 'undefined') {
     ];
     if (!allowedOrigins.includes(event.origin)) return;
     if (event.data?.type !== 'SHOPIFY_CUSTOMER') return;
-    const { customerId, customerEmail } = event.data;
+    const { customerId, customerEmail, customerName } = event.data;
     if (customerId) {
       localStorage.setItem('gang-sheet-customer-id', String(customerId));
       (window as any).__SHOPIFY_CUSTOMER_ID__ = String(customerId);
     }
     if (customerEmail) {
       localStorage.setItem('gang-sheet-customer-email', customerEmail);
+    }
+    if (customerName) {
+      localStorage.setItem('gang-sheet-customer-name', customerName);
     }
   });
 }
@@ -64,6 +67,18 @@ export function getStoredCustomerId(): string {
 
 export function getStoredCustomerEmail(): string | null {
   return localStorage.getItem('gang-sheet-customer-email');
+}
+
+export function getCustomerName(): string {
+  return localStorage.getItem('gang-sheet-customer-name') || '';
+}
+
+export function getCustomerInitials(): string {
+  const name = getCustomerName();
+  if (!name) return 'UN';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 }
 
 export function isAuthenticated(): boolean {
