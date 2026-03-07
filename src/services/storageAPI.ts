@@ -70,15 +70,23 @@ export function getStoredCustomerEmail(): string | null {
 }
 
 export function getCustomerName(): string {
-  return localStorage.getItem('gang-sheet-customer-name') || '';
+  try {
+    return localStorage.getItem('gang-sheet-customer-name') || '';
+  } catch {
+    return '';
+  }
 }
 
 export function getCustomerInitials(): string {
-  const name = getCustomerName();
-  if (!name) return 'UN';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  try {
+    const name = getCustomerName();
+    if (!name) return 'GS';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+  } catch {
+    return 'GS';
+  }
 }
 
 export function isAuthenticated(): boolean {

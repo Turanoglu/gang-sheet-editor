@@ -21,7 +21,7 @@ export const EditorPage: React.FC = () => {
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const [displayScale, setDisplayScale] = useState(0.1);
   const [quantity, setQuantity] = useState(1);
-  const [customerInitials, setCustomerInitials] = useState(() => getCustomerInitials());
+  const [customerInitials, setCustomerInitials] = useState(() => { try { return getCustomerInitials(); } catch { return 'GS'; } });
 
   const { 
     removeSelectedItems, 
