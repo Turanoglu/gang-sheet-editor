@@ -21,6 +21,7 @@ export const EditorPage: React.FC = () => {
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const [displayScale, setDisplayScale] = useState(0.1);
   const [quantity, setQuantity] = useState(1);
+  const [customerInitials, setCustomerInitials] = useState(() => getCustomerInitials());
 
   const { 
     removeSelectedItems, 
@@ -60,6 +61,22 @@ export const EditorPage: React.FC = () => {
     return () => {
       resizeObserver.disconnect();
     };
+  }, []);
+
+  // Update customer initials when SHOPIFY_CUSTOMER postMessage arrives
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'SHOPIFY_CUSTOMER' && event.data.customerName) {
+        const name: string = event.data.customerName.trim();
+        const parts = name.split(/\s+/);
+        const initials = parts.length === 1
+          ? parts[0].charAt(0).toUpperCase()
+          : (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+        setCustomerInitials(initials);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
   }, []);
 
   // Handle keyboard shortcuts
@@ -232,7 +249,7 @@ export const EditorPage: React.FC = () => {
           </button>
 
           <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-            <span className="text-sm font-bold text-white">{getCustomerInitials()}</span>
+            <span className="text-sm font-bold text-white">{customerInitials}</span>
           </div>
         </div>
       </div>
