@@ -1,4 +1,8 @@
 {% layout none %}
+{% unless customer %}
+  {% assign return_url = '/pages/gang-sheet-sample' | url_encode %}
+  <script>window.location.href = '/account/login?return_url={{ return_url }}';</script>
+{% endunless %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
