@@ -1070,9 +1070,10 @@ export const AdminPanel: React.FC = () => {
                       </tr>
                     ) : (
                       paginatedOrders.map((order) => (
-                        <OrderRow 
-                          key={order.id} 
-                          order={order} 
+                        <OrderRow
+                          key={order.id}
+                          order={order}
+                          adminMode={adminMode}
                           onStatusChange={handleStatusChange}
                           onView={() => setViewOrder(order)}
                           onDownload={() => handleDownloadOrder(order)}
@@ -1207,17 +1208,19 @@ const DesignRow: React.FC<{
     <td className="px-4 py-3 text-gray-500 text-sm">{formatDate(design.createdAt)}</td>
     <td className="px-4 py-3">
       <div className="flex items-center gap-1">
-        <button 
-          onClick={onDownload} 
-          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" 
-          title="Download PNG"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
-        </button>
-        <button 
+        {adminMode && (
+          <button
+            onClick={onDownload}
+            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+            title="Download PNG"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          </button>
+        )}
+        <button
           onClick={onView} 
           className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" 
           title="View Details"
@@ -1255,14 +1258,15 @@ const DesignRow: React.FC<{
 );
 
 // Order Row Component
-const OrderRow: React.FC<{ 
-  order: Order; 
+const OrderRow: React.FC<{
+  order: Order;
+  adminMode?: boolean;
   onStatusChange: (orderId: string, status: OrderStatus) => void;
   onView: () => void;
   onDownload: () => void;
   onDelete: () => void;
   formatDate: (date: Date | string) => string;
-}> = ({ order, onStatusChange, onView, onDownload, onDelete, formatDate }) => (
+}> = ({ order, adminMode, onStatusChange, onView, onDownload, onDelete, formatDate }) => (
   <tr className="hover:bg-gray-50">
     <td className="px-4 py-3">
       <div className="flex items-center gap-2">
@@ -1300,19 +1304,21 @@ const OrderRow: React.FC<{
     <td className="px-4 py-3 text-gray-500 text-sm">{formatDate(order.createdAt)}</td>
     <td className="px-4 py-3">
       <div className="flex items-center gap-1">
-        <button 
-          onClick={onDownload} 
-          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" 
-          title="Download All Images"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
-        </button>
-        <button 
-          onClick={onView} 
-          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" 
+        {adminMode && (
+          <button
+            onClick={onDownload}
+            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+            title="Download All Images"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          </button>
+        )}
+        <button
+          onClick={onView}
+          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
           title="View Order"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
