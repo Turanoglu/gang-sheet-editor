@@ -701,17 +701,11 @@ export const AdminPanel: React.FC = () => {
 
       {/* Sidebar */}
       <div className="w-56 bg-white border-r border-gray-200 flex flex-col">
-        {/* Logo + Profile */}
+        {/* Logo */}
         <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">GS</span>
-            </div>
-            <div
-              title={getCustomerEmail()}
-              className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center"
-            >
-              <span className="text-xs font-bold text-white">{getCustomerInitials()}</span>
             </div>
           </div>
         </div>
