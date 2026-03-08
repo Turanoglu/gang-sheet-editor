@@ -66,14 +66,18 @@ export const EditorPage: React.FC = () => {
   // Update customer initials when SHOPIFY_CUSTOMER postMessage arrives
   useEffect(() => {
     const handler = (event: MessageEvent) => {
-      if (event.data?.type === 'SHOPIFY_CUSTOMER' && event.data.customerName) {
-        const name: string = event.data.customerName.trim();
+      if (event.data?.type !== 'SHOPIFY_CUSTOMER') return;
+      const name: string = (event.data.customerName || '').trim();
+      const email: string = (event.data.customerEmail || '');
+      if (name) {
         const parts = name.split(/\s+/);
         const initials = parts.length === 1
           ? parts[0].charAt(0).toUpperCase()
           : (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-        setCustomerInitials(initials);
+        if (initials) { setCustomerInitials(initials); return; }
       }
+      // Fallback: first char of email
+      if (email) setCustomerInitials(email.charAt(0).toUpperCase());
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);

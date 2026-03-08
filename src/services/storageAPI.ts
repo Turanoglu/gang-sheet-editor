@@ -77,13 +77,26 @@ export function getCustomerName(): string {
   }
 }
 
+export function getCustomerEmail(): string {
+  try {
+    return localStorage.getItem('gang-sheet-customer-email') || '';
+  } catch {
+    return '';
+  }
+}
+
 export function getCustomerInitials(): string {
   try {
-    const name = getCustomerName();
-    if (!name) return 'GS';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    const name = getCustomerName().trim();
+    if (name) {
+      const parts = name.split(/\s+/);
+      if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+      return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }
+    // Fallback: use first char of email
+    const email = getCustomerEmail();
+    if (email) return email.charAt(0).toUpperCase();
+    return 'GS';
   } catch {
     return 'GS';
   }
