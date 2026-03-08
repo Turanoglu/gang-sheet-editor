@@ -23,6 +23,7 @@ export interface GangSheetDesign {
 export interface CartItem {
   id: string;
   designId: string;
+  orderId?: string; // Order created when added to cart (status: 'In Cart')
   design: GangSheetDesign;
   quantity: number;
   pricePerUnit: number;
@@ -69,7 +70,7 @@ export interface CartState {
 }
 
 export interface CartActions {
-  addToCart: (design: GangSheetDesign, quantity: number) => void;
+  addToCart: (design: GangSheetDesign, quantity: number, orderId?: string) => void;
   removeFromCart: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
@@ -97,7 +98,7 @@ export interface OrderActions {
   setCurrentDesign: (design: GangSheetDesign | null) => void;
   
   // Orders
-  createOrder: (customerName: string, cartItems: CartItem[]) => Order;
+  createOrder: (customerName: string, cartItems: CartItem[], initialStatus?: OrderStatus) => Order;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   deleteOrder: (orderId: string) => void;
   getOrdersByStatus: (status: OrderStatus) => Order[];

@@ -31,12 +31,13 @@ export const useCartStore = create<CartStore>()(
       items: [],
       isOpen: false,
 
-      addToCart: (design: GangSheetDesign, quantity: number) => {
+      addToCart: (design: GangSheetDesign, quantity: number, orderId?: string) => {
         const price = getPriceForBoard(design.boardSize.width, design.boardSize.height);
-        
+
         const newItem: CartItem = {
           id: uuidv4(),
           designId: design.id,
+          orderId,
           design,
           quantity,
           pricePerUnit: price,

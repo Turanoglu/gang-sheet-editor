@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useCartStore } from '../../store/cartStore';
 import { useOrderStore } from '../../store/orderStore';
 import { getVariantId, areVariantsConfigured } from '../../config/shopifyVariants';
+import { getCustomerName } from '../../services/storageAPI';
 
 // Detect if the editor is embedded inside an iframe (e.g. inkdyno.com)
 const isEmbedded = (): boolean => {
@@ -14,7 +15,7 @@ const isEmbedded = (): boolean => {
 
 export const CartDrawer: React.FC = () => {
   const { items, isOpen, closeCart, removeFromCart, updateQuantity, getTotal, clearCart } = useCartStore();
-  const { createOrder } = useOrderStore();
+  const { createOrder, updateOrderStatus } = useOrderStore();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutStatus, setCheckoutStatus] = useState<string>('');
 
@@ -25,6 +26,16 @@ export const CartDrawer: React.FC = () => {
     setCheckoutStatus('Preparing order...');
 
     try {
+      // Update existing 'In Cart' orders to 'Created', or create new orders if needed
+      const customerName = getCustomerName() || 'Customer';
+      for (const item of items) {
+        if (item.orderId) {
+          await updateOrderStatus(item.orderId, 'Created');
+        } else {
+          createOrder(customerName, [item], 'Created');
+        }
+      }
+
       if (isEmbedded() && areVariantsConfigured()) {
         // ── Shopify Cart API via postMessage ──────────────────────────
         const lineItems = items.map(item => {
@@ -53,8 +64,6 @@ export const CartDrawer: React.FC = () => {
           };
         });
 
-        // Save order locally before redirecting
-        createOrder('Shopify Customer', items);
         clearCart();
         closeCart();
 
@@ -67,15 +76,10 @@ export const CartDrawer: React.FC = () => {
         );
 
       } else {
-        // ── Standalone / fallback: just save locally ──────────────────
-        createOrder('Guest Customer', items);
+        // ── Standalone / fallback ──────────────────────────────────────
         clearCart();
         closeCart();
-        alert(
-          '✅ Order saved!\n\n' +
-          'To enable direct Shopify checkout, open the editor inside inkdyno.com ' +
-          'and configure Shopify variant IDs in src/config/shopifyVariants.ts.'
-        );
+        alert('✅ Order saved!');
       }
     } catch (error) {
       console.error('Checkout error:', error);

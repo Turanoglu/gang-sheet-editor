@@ -270,7 +270,7 @@ export const useOrderStore = create<ExtendedOrderStore>()(
       },
 
       // Orders
-      createOrder: (customerName: string, cartItems: CartItem[]): Order => {
+      createOrder: (customerName: string, cartItems: CartItem[], initialStatus: OrderStatus = 'In Cart'): Order => {
         const totalAmount = cartItems.reduce(
           (total, item) => total + item.pricePerUnit * item.quantity,
           0
@@ -281,7 +281,7 @@ export const useOrderStore = create<ExtendedOrderStore>()(
           orderNumber: generateOrderNumber(),
           customerName,
           items: cartItems,
-          status: 'Created',
+          status: initialStatus,
           totalAmount,
           createdAt: new Date(),
           updatedAt: new Date(),

@@ -13,7 +13,7 @@ import { useOrderStore } from '../store/orderStore';
 import type { GangSheetDesign } from '../types/order';
 import { getPriceForBoard } from '../types/order';
 import { generateCleanExport } from '../utils/export';
-import { getCustomerInitials, getCustomerId } from '../services/storageAPI';
+import { getCustomerInitials, getCustomerId, getCustomerName } from '../services/storageAPI';
 
 export const EditorPage: React.FC = () => {
   const stageRef = useRef<Konva.Stage | null>(null);
@@ -39,7 +39,7 @@ export const EditorPage: React.FC = () => {
   } = useEditorStore();
 
   const { addToCart, getItemCount, openCart } = useCartStore();
-  const { saveDesign } = useOrderStore();
+  const { saveDesign, createOrder } = useOrderStore();
 
   const cartItemCount = getItemCount();
   const currentPrice = getPriceForBoard(boardSize.width, boardSize.height);
@@ -168,8 +168,15 @@ export const EditorPage: React.FC = () => {
 
     const design = createDesignObject();
     saveDesign(design);
-    addToCart(design, quantity);
-    
+
+    // Create order with 'In Cart' status so it appears in the orders panel immediately
+    const customerName = getCustomerName() || 'Customer';
+    const pricePerUnit = getPriceForBoard(design.boardSize.width, design.boardSize.height);
+    const tempCartItem = { id: '', designId: design.id, design, quantity, pricePerUnit, addedAt: new Date() };
+    const order = createOrder(customerName, [tempCartItem], 'In Cart');
+
+    addToCart(design, quantity, order.id);
+
     // Show success message and open cart
     openCart();
     
