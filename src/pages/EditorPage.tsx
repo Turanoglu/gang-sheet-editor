@@ -24,6 +24,7 @@ export const EditorPage: React.FC = () => {
   const [customerInitials, setCustomerInitials] = useState(() => {
     try { getCustomerId(); return getCustomerInitials(); } catch { return 'GS'; }
   });
+  const [editingDesign, setEditingDesign] = useState<GangSheetDesign | null>(null);
 
   const {
     removeSelectedItems,
@@ -89,6 +90,7 @@ export const EditorPage: React.FC = () => {
   // Load design from admin panel "Edit in Builder" action
   useEffect(() => {
     if (currentDesign) {
+      setEditingDesign(currentDesign);
       loadDesign(currentDesign);
       setCurrentDesign(null);
     }
@@ -156,11 +158,11 @@ export const EditorPage: React.FC = () => {
     const fullExportUrl = generateThumbnail('print');
 
     return {
-      id: uuidv4(),
-      name: 'New Gang Sheet',
+      id: editingDesign?.id ?? uuidv4(),
+      name: editingDesign?.name ?? 'New Gang Sheet',
       boardSize,
       imageCount: items.length,
-      createdAt: new Date(),
+      createdAt: editingDesign?.createdAt ?? new Date(),
       updatedAt: new Date(),
       thumbnailUrl,
       fullExportUrl,

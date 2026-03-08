@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import { BOARD_SIZES } from '../../types';
-import { getCustomerId } from '../../services/storageAPI';
+import { getCustomerId, getCustomerName, getCustomerEmail } from '../../services/storageAPI';
 
 interface ToolbarProps {
   // No props needed anymore
@@ -267,7 +267,12 @@ export const Toolbar: React.FC<ToolbarProps> = () => {
         <button
           onClick={() => {
             const customerId = getCustomerId();
-            window.open(`/admin?customerId=${customerId}`, '_blank');
+            const params = new URLSearchParams({ customerId });
+            const name = getCustomerName();
+            const email = getCustomerEmail();
+            if (name) params.set('customerName', name);
+            if (email) params.set('customerEmail', email);
+            window.open(`/admin?${params.toString()}`, '_blank');
           }}
           title="Tasarımlarım ve Siparişlerim"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-gray-100 hover:bg-gray-200 text-gray-700"
