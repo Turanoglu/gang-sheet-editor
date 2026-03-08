@@ -14,6 +14,8 @@ import {
   isAuthenticated,
   getCustomerInitials,
   getCustomerEmail,
+  getCustomerId,
+  getCustomerName,
 } from '../services/storageAPI';
 
 const SHOPIFY_STORE_URL = import.meta.env.VITE_SHOPIFY_STORE_URL || 'https://gang-sheet-test1.myshopify.com/pages/gang-sheet';
@@ -358,6 +360,17 @@ export const AdminPanel: React.FC = () => {
   const orders = adminMode ? adminOrders : myOrders;
   const designs = adminMode ? adminDesigns : myDesigns;
 
+  // Build editor URL with customer context so the editor knows who the user is
+  const editorUrl = (() => {
+    const cid = getCustomerId();
+    const params = new URLSearchParams({ customerId: cid });
+    const name = getCustomerName();
+    const email = getCustomerEmail();
+    if (name) params.set('customerName', name);
+    if (email) params.set('customerEmail', email);
+    return `/?${params.toString()}`;
+  })();
+
   const loadAdminData = useCallback(async () => {
     if (!adminMode) {
       loadFromCloud();
@@ -545,7 +558,13 @@ export const AdminPanel: React.FC = () => {
   // Edit design - load into editor
   const handleEditDesign = (design: GangSheetDesign) => {
     setCurrentDesign(design);
-    navigate('/');
+    const cid = getCustomerId();
+    const params = new URLSearchParams({ customerId: cid });
+    const name = getCustomerName();
+    const email = getCustomerEmail();
+    if (name) params.set('customerName', name);
+    if (email) params.set('customerEmail', email);
+    navigate(`/?${params.toString()}`);
   };
 
   // Handle save design name
@@ -776,7 +795,7 @@ export const AdminPanel: React.FC = () => {
           <div className="mt-6 pt-4 border-t border-gray-200">
             <div className="text-xs font-medium text-gray-400 px-3 mb-2">QUICK ACTIONS</div>
             <Link
-              to="/"
+              to={editorUrl}
               className="w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors text-gray-600 hover:bg-gray-100"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -944,7 +963,7 @@ export const AdminPanel: React.FC = () => {
               </div>
               <div className="flex items-center gap-3">
                 <Link
-                  to="/"
+                  to={editorUrl}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

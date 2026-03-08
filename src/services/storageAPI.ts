@@ -43,6 +43,8 @@ export function getCustomerId(): string {
     localStorage.setItem('gang-sheet-customer-id', customerIdParam);
     const emailParam = urlParams.get('customerEmail');
     if (emailParam) localStorage.setItem('gang-sheet-customer-email', emailParam);
+    const nameParam = urlParams.get('customerName');
+    if (nameParam) localStorage.setItem('gang-sheet-customer-name', nameParam);
     return customerIdParam;
   }
 

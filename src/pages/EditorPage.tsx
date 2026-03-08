@@ -13,7 +13,7 @@ import { useOrderStore } from '../store/orderStore';
 import type { GangSheetDesign } from '../types/order';
 import { getPriceForBoard } from '../types/order';
 import { generateCleanExport } from '../utils/export';
-import { getCustomerInitials } from '../services/storageAPI';
+import { getCustomerInitials, getCustomerId } from '../services/storageAPI';
 
 export const EditorPage: React.FC = () => {
   const stageRef = useRef<Konva.Stage | null>(null);
@@ -21,7 +21,9 @@ export const EditorPage: React.FC = () => {
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
   const [displayScale, setDisplayScale] = useState(0.1);
   const [quantity, setQuantity] = useState(1);
-  const [customerInitials, setCustomerInitials] = useState(() => { try { return getCustomerInitials(); } catch { return 'GS'; } });
+  const [customerInitials, setCustomerInitials] = useState(() => {
+    try { getCustomerId(); return getCustomerInitials(); } catch { return 'GS'; }
+  });
 
   const { 
     removeSelectedItems, 
