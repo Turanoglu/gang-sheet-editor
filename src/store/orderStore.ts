@@ -92,6 +92,30 @@ export const useOrderStore = create<ExtendedOrderStore>()(
         }
         localStorage.setItem(LAST_CUSTOMER_KEY, currentCustomerId);
 
+        // Cross-tab sync: merge localStorage state into in-memory state.
+        // This handles orders created in another tab (e.g. editor tab) that are
+        // not yet in this tab's in-memory store.
+        try {
+          const persisted = localStorage.getItem('gang-sheet-orders');
+          if (persisted) {
+            const parsed = JSON.parse(persisted);
+            const persistedOrders: Order[] = parsed.state?.orders || [];
+            const persistedDesigns: GangSheetDesign[] = parsed.state?.designs || [];
+            const currentOrderIds = new Set(get().orders.map(o => o.id));
+            const currentDesignIds = new Set(get().designs.map(d => d.id));
+            const extraOrders = persistedOrders.filter(o => !currentOrderIds.has(o.id));
+            const extraDesigns = persistedDesigns.filter(d => !currentDesignIds.has(d.id));
+            if (extraOrders.length > 0 || extraDesigns.length > 0) {
+              set(state => ({
+                orders: [...state.orders, ...extraOrders],
+                designs: [...state.designs, ...extraDesigns],
+              }));
+            }
+          }
+        } catch {
+          // Silent fail — localStorage read errors must not break cloud sync
+        }
+
         set({ isCloudSyncing: true, cloudSyncError: null });
         try {
           const [cloudDesigns, cloudOrders] = await Promise.all([
