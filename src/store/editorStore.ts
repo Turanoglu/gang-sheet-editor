@@ -581,17 +581,33 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     set({ hasOverflow });
   },
 
-  loadDesign: (design) => {
+  loadDesign: async (design) => {
     try {
       const items: import('../types').CanvasItem[] = design.canvasData
         ? JSON.parse(design.canvasData)
         : [];
-      const assets: Record<string, import('../types').Asset> = design.assetsData
+      const rawAssets: Record<string, import('../types').Asset> = design.assetsData
         ? JSON.parse(design.assetsData)
         : {};
+
+      // imageEl is a DOM object — it cannot be serialized to JSON.
+      // Recreate each HTMLImageElement from the stored dataUrl.
+      const loadedAssets: Record<string, import('../types').Asset> = {};
+      await Promise.all(
+        Object.entries(rawAssets).map(
+          ([id, raw]) =>
+            new Promise<void>((resolve) => {
+              const img = new window.Image();
+              img.onload = () => { loadedAssets[id] = { ...raw, imageEl: img }; resolve(); };
+              img.onerror = () => { loadedAssets[id] = { ...raw, imageEl: img }; resolve(); };
+              img.src = raw.dataUrl;
+            })
+        )
+      );
+
       set({
         items,
-        assets,
+        assets: loadedAssets,
         boardSize: design.boardSize,
         selectedIds: [],
         history: [],

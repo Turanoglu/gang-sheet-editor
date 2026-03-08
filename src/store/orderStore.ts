@@ -367,7 +367,8 @@ export const useOrderStore = create<ExtendedOrderStore>()(
       storage: safeLocalStorage,
       partialize: (state) => ({
         orders: state.orders,
-        designs: state.designs,
+        // Strip large base64 fields — they are stored in R2 cloud, not localStorage
+        designs: state.designs.map(({ canvasData: _c, assetsData: _a, thumbnailUrl: _t, fullExportUrl: _f, ...d }) => d),
       }),
     }
   )
