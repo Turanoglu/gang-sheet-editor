@@ -16,6 +16,7 @@ import {
   getCustomerEmail,
   getCustomerId,
   getCustomerName,
+  getShopDomain,
 } from '../services/storageAPI';
 
 const SHOPIFY_STORE_URL = import.meta.env.VITE_SHOPIFY_STORE_URL || 'https://gang-sheet-test1.myshopify.com/pages/gang-sheet';
@@ -366,8 +367,10 @@ export const AdminPanel: React.FC = () => {
     const params = new URLSearchParams({ customerId: cid });
     const name = getCustomerName();
     const email = getCustomerEmail();
+    const shopDomain = getShopDomain();
     if (name) params.set('customerName', name);
     if (email) params.set('customerEmail', email);
+    if (shopDomain) params.set('shopDomain', shopDomain);
     return `/?${params.toString()}`;
   })();
 
@@ -380,9 +383,10 @@ export const AdminPanel: React.FC = () => {
     if (!key) return;
     setAdminLoading(true);
     try {
+      const shopDomain = getShopDomain();
       const [fetchedOrders, fetchedDesigns] = await Promise.all([
-        getAdminOrdersFromCloud(key),
-        getAdminDesignsFromCloud(key),
+        getAdminOrdersFromCloud(key, shopDomain || undefined),
+        getAdminDesignsFromCloud(key, shopDomain || undefined),
       ]);
       setAdminOrders(fetchedOrders);
       setAdminDesigns(fetchedDesigns);
@@ -562,8 +566,10 @@ export const AdminPanel: React.FC = () => {
     const params = new URLSearchParams({ customerId: cid });
     const name = getCustomerName();
     const email = getCustomerEmail();
+    const shopDomain = getShopDomain();
     if (name) params.set('customerName', name);
     if (email) params.set('customerEmail', email);
+    if (shopDomain) params.set('shopDomain', shopDomain);
     navigate(`/?${params.toString()}`);
   };
 

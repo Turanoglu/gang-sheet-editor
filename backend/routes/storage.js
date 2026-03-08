@@ -29,6 +29,24 @@ const getCustomerId = (req) => {
          'anonymous';
 };
 
+// Helper: Get shop domain from request
+const getShopDomain = (req) => {
+  const domain = req.headers['x-shop-domain'] || req.query.shopDomain || '';
+  return domain.toLowerCase().replace(/^https?:\/\//, '').replace(/\/$/, '');
+};
+
+// Owner shop domain (existing data without shopDomain field belongs to this store)
+const OWNER_SHOP_DOMAIN = (process.env.DEFAULT_SHOP_DOMAIN || '').toLowerCase();
+
+// Check if an item belongs to the requested shop domain
+// Legacy data (no shopDomain field) is treated as belonging to the owner store
+const itemBelongsToShop = (item, requestedShopDomain) => {
+  if (!requestedShopDomain) return true; // No filter = super admin sees all
+  const itemDomain = (item.shopDomain || '').toLowerCase();
+  if (!itemDomain) return requestedShopDomain === OWNER_SHOP_DOMAIN || !OWNER_SHOP_DOMAIN;
+  return itemDomain === requestedShopDomain;
+};
+
 // Admin auth middleware
 const requireAdminKey = (req, res, next) => {
   const adminKey = req.headers['x-admin-key'];
@@ -56,6 +74,7 @@ const streamToString = async (stream) => {
 router.post('/designs', async (req, res) => {
   try {
     const customerId = getCustomerId(req);
+    const shopDomain = getShopDomain(req);
     const { design } = req.body;
 
     if (!design || !design.id) {
@@ -63,11 +82,12 @@ router.post('/designs', async (req, res) => {
     }
 
     const key = `users/${customerId}/designs/${design.id}.json`;
+    const designToSave = shopDomain ? { ...design, shopDomain } : design;
 
     await s3Client.send(new PutObjectCommand({
       Bucket: BUCKET_NAME,
       Key: key,
-      Body: JSON.stringify(design),
+      Body: JSON.stringify(designToSave),
       ContentType: 'application/json',
     }));
 
@@ -165,6 +185,7 @@ router.delete('/designs/:designId', async (req, res) => {
 router.post('/orders', async (req, res) => {
   try {
     const customerId = getCustomerId(req);
+    const shopDomain = getShopDomain(req);
     const { order } = req.body;
 
     if (!order || !order.id) {
@@ -172,11 +193,12 @@ router.post('/orders', async (req, res) => {
     }
 
     const key = `users/${customerId}/orders/${order.id}.json`;
+    const orderToSave = shopDomain ? { ...order, shopDomain } : order;
 
     await s3Client.send(new PutObjectCommand({
       Bucket: BUCKET_NAME,
       Key: key,
-      Body: JSON.stringify(order),
+      Body: JSON.stringify(orderToSave),
       ContentType: 'application/json',
     }));
 
@@ -383,9 +405,10 @@ router.post('/upload-image', async (req, res) => {
 
 // ==================== ADMIN ENDPOINTS ====================
 
-// Get ALL orders from ALL customers (admin only)
+// Get ALL orders from ALL customers (admin only, scoped to shopDomain)
 router.get('/admin/orders', requireAdminKey, async (req, res) => {
   try {
+    const shopDomain = getShopDomain(req);
     const listResponse = await s3Client.send(new ListObjectsV2Command({
       Bucket: BUCKET_NAME,
       Prefix: 'users/',
@@ -403,10 +426,9 @@ router.get('/admin/orders', requireAdminKey, async (req, res) => {
         }));
         const body = await streamToString(getResponse.Body);
         const parsed = JSON.parse(body);
-        // Attach customerId from the path: users/{customerId}/orders/{id}.json
         const parts = obj.Key.split('/');
         parsed.customerId = parts[1];
-        orders.push(parsed);
+        if (itemBelongsToShop(parsed, shopDomain)) orders.push(parsed);
       } catch (e) {
         console.error('Error reading order:', obj.Key, e.message);
       }
@@ -420,9 +442,10 @@ router.get('/admin/orders', requireAdminKey, async (req, res) => {
   }
 });
 
-// Get ALL designs from ALL customers (admin only)
+// Get ALL designs from ALL customers (admin only, scoped to shopDomain)
 router.get('/admin/designs', requireAdminKey, async (req, res) => {
   try {
+    const shopDomain = getShopDomain(req);
     const listResponse = await s3Client.send(new ListObjectsV2Command({
       Bucket: BUCKET_NAME,
       Prefix: 'users/',
@@ -442,7 +465,7 @@ router.get('/admin/designs', requireAdminKey, async (req, res) => {
         const parsed = JSON.parse(body);
         const parts = obj.Key.split('/');
         parsed.customerId = parts[1];
-        designs.push(parsed);
+        if (itemBelongsToShop(parsed, shopDomain)) designs.push(parsed);
       } catch (e) {
         console.error('Error reading design:', obj.Key, e.message);
       }

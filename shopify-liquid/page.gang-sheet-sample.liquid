@@ -44,7 +44,8 @@
         type: 'SHOPIFY_CUSTOMER',
         customerId: '{{ customer.id }}',
         customerEmail: '{{ customer.email }}',
-        customerName: '{{ customer.first_name }} {{ customer.last_name }}'
+        customerName: '{{ customer.first_name }} {{ customer.last_name }}',
+        shopDomain: '{{ shop.permanent_domain }}'
       }, 'https://gang-sheet-editor.vercel.app');
     });
   </script>

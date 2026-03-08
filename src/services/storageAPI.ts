@@ -23,6 +23,9 @@ if (typeof window !== 'undefined') {
     if (customerName) {
       localStorage.setItem('gang-sheet-customer-name', customerName);
     }
+    if (event.data.shopDomain) {
+      localStorage.setItem('gang-sheet-shop-domain', event.data.shopDomain);
+    }
   });
 }
 
@@ -45,6 +48,8 @@ export function getCustomerId(): string {
     if (emailParam) localStorage.setItem('gang-sheet-customer-email', emailParam);
     const nameParam = urlParams.get('customerName');
     if (nameParam) localStorage.setItem('gang-sheet-customer-name', nameParam);
+    const shopDomainParam = urlParams.get('shopDomain');
+    if (shopDomainParam) localStorage.setItem('gang-sheet-shop-domain', shopDomainParam);
     return customerIdParam;
   }
 
@@ -69,6 +74,14 @@ export function getStoredCustomerId(): string {
 
 export function getStoredCustomerEmail(): string | null {
   return localStorage.getItem('gang-sheet-customer-email');
+}
+
+export function getShopDomain(): string {
+  try {
+    return localStorage.getItem('gang-sheet-shop-domain') || '';
+  } catch {
+    return '';
+  }
 }
 
 export function getCustomerName(): string {
@@ -117,11 +130,13 @@ export function isAuthenticated(): boolean {
 // Helper for fetch with customer ID header
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   const customerId = getCustomerId();
+  const shopDomain = getShopDomain();
   return fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       'X-Shopify-Customer-Id': customerId,
+      ...(shopDomain && { 'X-Shop-Domain': shopDomain }),
       ...options.headers,
     },
   });
@@ -334,20 +349,20 @@ export async function getImageDownloadUrl(key: string): Promise<string> {
 
 // ==================== ADMIN API ====================
 
-export async function getAdminOrdersFromCloud(adminKey: string): Promise<Order[]> {
-  const response = await fetch(`${API_BASE_URL}/api/storage/admin/orders`, {
-    headers: { 'X-Admin-Key': adminKey },
-  });
+export async function getAdminOrdersFromCloud(adminKey: string, shopDomain?: string): Promise<Order[]> {
+  const headers: Record<string, string> = { 'X-Admin-Key': adminKey };
+  if (shopDomain) headers['X-Shop-Domain'] = shopDomain;
+  const response = await fetch(`${API_BASE_URL}/api/storage/admin/orders`, { headers });
   if (response.status === 401) throw new Error('Unauthorized');
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
   return data.orders || [];
 }
 
-export async function getAdminDesignsFromCloud(adminKey: string): Promise<GangSheetDesign[]> {
-  const response = await fetch(`${API_BASE_URL}/api/storage/admin/designs`, {
-    headers: { 'X-Admin-Key': adminKey },
-  });
+export async function getAdminDesignsFromCloud(adminKey: string, shopDomain?: string): Promise<GangSheetDesign[]> {
+  const headers: Record<string, string> = { 'X-Admin-Key': adminKey };
+  if (shopDomain) headers['X-Shop-Domain'] = shopDomain;
+  const response = await fetch(`${API_BASE_URL}/api/storage/admin/designs`, { headers });
   if (response.status === 401) throw new Error('Unauthorized');
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
