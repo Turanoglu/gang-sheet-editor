@@ -1175,8 +1175,8 @@ const DesignRow: React.FC<{
   formatDate: (date: Date | string) => string;
 }> = ({ design, adminMode, onView, onEdit, onEditInBuilder, onDownload, onDelete, formatDate }) => (
   <tr className="hover:bg-gray-50">
-    <td className="px-4 py-3">
-      <div className="flex items-center gap-2">
+    <td className="px-4 py-3 max-w-[260px]">
+      <div className="flex items-center gap-2 min-w-0">
         {/* Thumbnail preview */}
         <div className="w-8 h-8 bg-gray-100 rounded overflow-hidden flex-shrink-0">
           {design.thumbnailUrl ? (
@@ -1189,7 +1189,7 @@ const DesignRow: React.FC<{
             </div>
           )}
         </div>
-        <span className="font-medium text-gray-800">{design.name}</span>
+        <span className="font-medium text-gray-800 truncate" title={design.name}>{design.name}</span>
         <button
           onClick={onEdit}
           className="text-gray-400 hover:text-blue-600 transition-colors"
