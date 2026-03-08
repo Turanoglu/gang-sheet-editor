@@ -25,21 +25,22 @@ export const EditorPage: React.FC = () => {
     try { getCustomerId(); return getCustomerInitials(); } catch { return 'GS'; }
   });
 
-  const { 
-    removeSelectedItems, 
-    selectedIds, 
-    duplicateSelectedItems, 
-    undo, 
+  const {
+    removeSelectedItems,
+    selectedIds,
+    duplicateSelectedItems,
+    undo,
     redo,
     boardSize,
     dpi,
     hasOverflow,
     items,
     assets,
+    loadDesign,
   } = useEditorStore();
 
   const { addToCart, getItemCount, openCart } = useCartStore();
-  const { saveDesign, createOrder } = useOrderStore();
+  const { saveDesign, createOrder, currentDesign, setCurrentDesign } = useOrderStore();
 
   const cartItemCount = getItemCount();
   const currentPrice = getPriceForBoard(boardSize.width, boardSize.height);
@@ -83,6 +84,15 @@ export const EditorPage: React.FC = () => {
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
+  }, []);
+
+  // Load design from admin panel "Edit in Builder" action
+  useEffect(() => {
+    if (currentDesign) {
+      loadDesign(currentDesign);
+      setCurrentDesign(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Handle keyboard shortcuts

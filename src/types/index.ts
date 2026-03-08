@@ -165,6 +165,9 @@ export interface EditorActions {
   undo: () => void;
   redo: () => void;
 
+  // Load a saved design into the editor
+  loadDesign: (design: import('./order').GangSheetDesign) => void;
+
   // Board dimensions helpers
   getBoardPxWidth: () => number;
   getBoardPxHeight: () => number;

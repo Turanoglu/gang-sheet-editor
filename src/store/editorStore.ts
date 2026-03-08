@@ -581,6 +581,27 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     set({ hasOverflow });
   },
 
+  loadDesign: (design) => {
+    try {
+      const items: import('../types').CanvasItem[] = design.canvasData
+        ? JSON.parse(design.canvasData)
+        : [];
+      const assets: Record<string, import('../types').Asset> = design.assetsData
+        ? JSON.parse(design.assetsData)
+        : {};
+      set({
+        items,
+        assets,
+        boardSize: design.boardSize,
+        selectedIds: [],
+        history: [],
+        historyIndex: -1,
+      });
+    } catch (err) {
+      console.error('Failed to load design into editor:', err);
+    }
+  },
+
   // Position control - Move selected items to top of board
   moveToTop: () => {
     const { selectedIds } = get();
