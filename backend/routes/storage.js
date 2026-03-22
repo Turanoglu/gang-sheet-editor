@@ -113,7 +113,7 @@ router.get('/designs', async (req, res) => {
       return res.json({ designs: [] });
     }
 
-    // Fetch each design
+    // Fetch each design and refresh thumbnail URL
     const designs = await Promise.all(
       listResponse.Contents.map(async (obj) => {
         try {
@@ -122,7 +122,17 @@ router.get('/designs', async (req, res) => {
             Key: obj.Key,
           }));
           const bodyContents = await streamToString(getResponse.Body);
-          return JSON.parse(bodyContents);
+          const design = JSON.parse(bodyContents);
+          // Regenerate fresh presigned thumbnail URL (original expires after 24h)
+          const thumbKey = `exports/${customerId}/${design.id}/thumbnail.png`;
+          try {
+            design.thumbnailUrl = await getSignedUrl(
+              s3Client,
+              new GetObjectCommand({ Bucket: BUCKET_NAME, Key: thumbKey }),
+              { expiresIn: 86400 }
+            );
+          } catch { /* keep existing url if key generation fails */ }
+          return design;
         } catch (err) {
           console.error(`Error reading design ${obj.Key}:`, err);
           return null;
@@ -465,6 +475,15 @@ router.get('/admin/designs', requireAdminKey, async (req, res) => {
         const parsed = JSON.parse(body);
         const parts = obj.Key.split('/');
         parsed.customerId = parts[1];
+        // Refresh thumbnail presigned URL
+        const thumbKey = `exports/${parsed.customerId}/${parsed.id}/thumbnail.png`;
+        try {
+          parsed.thumbnailUrl = await getSignedUrl(
+            s3Client,
+            new GetObjectCommand({ Bucket: BUCKET_NAME, Key: thumbKey }),
+            { expiresIn: 86400 }
+          );
+        } catch { /* keep existing */ }
         if (itemBelongsToShop(parsed, shopDomain)) designs.push(parsed);
       } catch (e) {
         console.error('Error reading design:', obj.Key, e.message);
