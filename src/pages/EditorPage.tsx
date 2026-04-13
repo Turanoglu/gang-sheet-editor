@@ -26,6 +26,11 @@ export const EditorPage: React.FC = () => {
   });
   const [editingDesign, setEditingDesign] = useState<GangSheetDesign | null>(null);
 
+  // Pan / Hand tool state
+  const [isPanMode, setIsPanMode] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const panStartRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
+
   const {
     removeSelectedItems,
     selectedIds,
@@ -100,6 +105,15 @@ export const EditorPage: React.FC = () => {
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
+      // Space → pan mode (ignore when typing in inputs)
+      if (e.code === 'Space' && !e.repeat &&
+          !(e.target instanceof HTMLInputElement) &&
+          !(e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        setIsPanMode(true);
+        return;
+      }
+
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.length > 0) {
         e.preventDefault();
         removeSelectedItems();
@@ -126,12 +140,47 @@ export const EditorPage: React.FC = () => {
     [selectedIds, removeSelectedItems, duplicateSelectedItems, undo, redo]
   );
 
+  const handleKeyUp = useCallback((e: KeyboardEvent) => {
+    if (e.code === 'Space') {
+      setIsPanMode(false);
+      setIsPanning(false);
+      panStartRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [handleKeyDown]);
+  }, [handleKeyDown, handleKeyUp]);
+
+  // Pan mouse handlers
+  const handlePanMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!isPanMode || !containerRef.current) return;
+    setIsPanning(true);
+    panStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      scrollLeft: containerRef.current.scrollLeft,
+      scrollTop: containerRef.current.scrollTop,
+    };
+  }, [isPanMode]);
+
+  const handlePanMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isPanning || !panStartRef.current || !containerRef.current) return;
+    const dx = e.clientX - panStartRef.current.x;
+    const dy = e.clientY - panStartRef.current.y;
+    containerRef.current.scrollLeft = panStartRef.current.scrollLeft - dx;
+    containerRef.current.scrollTop = panStartRef.current.scrollTop - dy;
+  }, [isPanning]);
+
+  const handlePanMouseUp = useCallback(() => {
+    setIsPanning(false);
+    panStartRef.current = null;
+  }, []);
 
   // Generate clean thumbnail from canvas (without grid, selections, etc.)
   const generateThumbnail = (quality: 'thumbnail' | 'full' | 'tiny' | 'print' = 'thumbnail'): string => {
@@ -321,7 +370,12 @@ export const EditorPage: React.FC = () => {
                 `,
                 backgroundSize: '20px 20px',
                 backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px',
+                cursor: isPanMode ? (isPanning ? 'grabbing' : 'grab') : undefined,
               }}
+              onMouseDown={handlePanMouseDown}
+              onMouseMove={handlePanMouseMove}
+              onMouseUp={handlePanMouseUp}
+              onMouseLeave={handlePanMouseUp}
             >
               {/* Overflow Warning */}
               {hasOverflow && (
@@ -336,7 +390,7 @@ export const EditorPage: React.FC = () => {
                 </div>
               )}
               
-              <div className={`shadow-2xl rounded-sm overflow-hidden ${hasOverflow ? 'ring-4 ring-red-500 ring-opacity-50' : ''}`}>
+              <div className={`relative shadow-2xl rounded-sm overflow-hidden ${hasOverflow ? 'ring-4 ring-red-500 ring-opacity-50' : ''}`}>
                 <GangSheetCanvas
                   containerWidth={containerSize.width}
                   containerHeight={containerSize.height}
@@ -344,6 +398,13 @@ export const EditorPage: React.FC = () => {
                   displayScale={displayScale}
                   setDisplayScale={setDisplayScale}
                 />
+                {/* Pan overlay: blocks Konva interactions while Space is held */}
+                {isPanMode && (
+                  <div
+                    className="absolute inset-0"
+                    style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+                  />
+                )}
               </div>
             </div>
           </div>

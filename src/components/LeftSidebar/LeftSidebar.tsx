@@ -436,12 +436,51 @@ export const LeftSidebar: React.FC = () => {
     return items.filter(item => item.assetId === assetId).length;
   };
 
-  // Select first item with this asset
+  // Select first item with this asset, or add to board if none exist
   const selectAssetItem = (assetId: string) => {
-    const item = items.find(i => i.assetId === assetId);
-    if (item) {
-      setSelectedIds([item.id]);
+    const existingItem = items.find(i => i.assetId === assetId);
+    if (existingItem) {
+      setSelectedIds([existingItem.id]);
+      return;
     }
+
+    // No items on board for this asset → add a new one
+    const asset = assets[assetId];
+    if (!asset) return;
+
+    const maxInitialWidth = inchesToPx(6, dpi);
+    const maxInitialHeight = inchesToPx(6, dpi);
+
+    let itemWidth = asset.originalWidth;
+    let itemHeight = asset.originalHeight;
+
+    if (itemWidth > maxInitialWidth) {
+      const scale = maxInitialWidth / itemWidth;
+      itemWidth = maxInitialWidth;
+      itemHeight = itemHeight * scale;
+    }
+    if (itemHeight > maxInitialHeight) {
+      const scale = maxInitialHeight / itemHeight;
+      itemHeight = maxInitialHeight;
+      itemWidth = itemWidth * scale;
+    }
+
+    const canvasItem: CanvasItem = {
+      id: uuidv4(),
+      assetId,
+      x: inchesToPx(0.5, dpi),
+      y: inchesToPx(0.5, dpi),
+      width: itemWidth,
+      height: itemHeight,
+      rotation: 0,
+      lockedAspect: true,
+      opacity: 1,
+      flipX: false,
+      flipY: false,
+      zIndex: Math.max(...items.map((item) => item.zIndex), 0) + 1,
+    };
+
+    addItem(canvasItem);
   };
 
   const thumbnails = Object.values(assets);
@@ -511,29 +550,32 @@ export const LeftSidebar: React.FC = () => {
                   key={asset.id}
                   onClick={() => selectAssetItem(asset.id)}
                   className={`relative rounded-xl border-2 p-2 cursor-pointer transition-all
-                    ${isSelected 
-                      ? 'border-blue-500 bg-blue-50 shadow-md' 
-                      : 'border-gray-200 hover:border-blue-300 hover:shadow-sm'
+                    ${isSelected
+                      ? 'border-blue-500 bg-blue-50 shadow-md'
+                      : itemCount === 0
+                        ? 'border-dashed border-orange-400 bg-orange-50 hover:border-orange-500 hover:shadow-sm'
+                        : 'border-gray-200 hover:border-blue-300 hover:shadow-sm'
                     }`}
+                  title={itemCount === 0 ? 'Click to add back to board' : undefined}
                 >
                   {/* Remove button */}
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      // Remove asset and all related items
                       removeAsset(asset.id);
                     }}
-                    className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600 
-                               text-white rounded-full text-xs flex items-center justify-center 
+                    className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 hover:bg-red-600
+                               text-white rounded-full text-xs flex items-center justify-center
                                shadow-md transition-colors z-10"
                   >
                     ×
                   </button>
 
-                  {/* Image count badge */}
-                  <span className="absolute top-1 left-1 bg-blue-500 text-white text-[10px] 
-                                   px-1.5 py-0.5 rounded-full font-medium shadow-sm z-10">
-                    {itemCount}
+                  {/* Image count badge — shows + icon when count is 0 */}
+                  <span className={`absolute top-1 left-1 text-white text-[10px]
+                                   px-1.5 py-0.5 rounded-full font-medium shadow-sm z-10
+                                   ${itemCount === 0 ? 'bg-orange-400' : 'bg-blue-500'}`}>
+                    {itemCount === 0 ? '+ Add' : itemCount}
                   </span>
 
                   {/* Thumbnail + Edit button row */}
