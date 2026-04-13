@@ -145,27 +145,29 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
 
   // Duplicate
   duplicateItem: (id: string) => {
-    const { items, getBoardPxWidth, getBoardPxHeight } = get();
+    const { items, getBoardPxWidth, getBoardPxHeight, autoFillSettings } = get();
     const item = items.find((i) => i.id === id);
     if (!item) return;
 
     get().pushToHistory();
 
-    const offset = inchesToPx(0.25); // 0.25 inch offset
+    const spacingPx = autoFillSettings.spacingPx;
     const boardWidth = getBoardPxWidth();
     const boardHeight = getBoardPxHeight();
 
-    // Calculate new position, clamping to board bounds
-    let newX = item.x + offset;
-    let newY = item.y + offset;
+    // Try placing to the right first, then below, then clamp
+    let newX = item.x + item.width + spacingPx;
+    let newY = item.y;
 
-    // Clamp to board bounds
     if (newX + item.width > boardWidth) {
-      newX = Math.max(0, boardWidth - item.width);
+      // Doesn't fit to the right → place below
+      newX = item.x;
+      newY = item.y + item.height + spacingPx;
     }
-    if (newY + item.height > boardHeight) {
-      newY = Math.max(0, boardHeight - item.height);
-    }
+
+    // Final clamp to board bounds
+    newX = Math.max(0, Math.min(newX, boardWidth - item.width));
+    newY = Math.max(0, Math.min(newY, boardHeight - item.height));
 
     const newItem: CanvasItem = {
       ...item,
@@ -182,12 +184,12 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
   },
 
   duplicateSelectedItems: () => {
-    const { items, selectedIds, getBoardPxWidth, getBoardPxHeight } = get();
+    const { items, selectedIds, getBoardPxWidth, getBoardPxHeight, autoFillSettings } = get();
     if (selectedIds.length === 0) return;
 
     get().pushToHistory();
 
-    const offset = inchesToPx(0.25);
+    const spacingPx = autoFillSettings.spacingPx;
     const boardWidth = getBoardPxWidth();
     const boardHeight = getBoardPxHeight();
     const maxZIndex = Math.max(...items.map((i) => i.zIndex), 0);
@@ -197,15 +199,17 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     const newIds: string[] = [];
 
     selectedItems.forEach((item, index) => {
-      let newX = item.x + offset;
-      let newY = item.y + offset;
+      // Try placing to the right first, then below, then clamp
+      let newX = item.x + item.width + spacingPx;
+      let newY = item.y;
 
       if (newX + item.width > boardWidth) {
-        newX = Math.max(0, boardWidth - item.width);
+        newX = item.x;
+        newY = item.y + item.height + spacingPx;
       }
-      if (newY + item.height > boardHeight) {
-        newY = Math.max(0, boardHeight - item.height);
-      }
+
+      newX = Math.max(0, Math.min(newX, boardWidth - item.width));
+      newY = Math.max(0, Math.min(newY, boardHeight - item.height));
 
       const newItem: CanvasItem = {
         ...item,
@@ -437,12 +441,14 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
   },
 
   applyQuantities: () => {
-    const { items, itemQuantities, getBoardPxWidth, getBoardPxHeight } = get();
+    const { items, itemQuantities, getBoardPxWidth, getBoardPxHeight, autoFillSettings } = get();
 
     get().pushToHistory();
 
     const boardWidth = getBoardPxWidth();
     const boardHeight = getBoardPxHeight();
+    const spacingPx = autoFillSettings.spacingPx;
+    const marginPx = autoFillSettings.marginPx;
     const maxZIndex = Math.max(...items.map((i) => i.zIndex), 0);
     let zIndexCounter = maxZIndex + 1;
 
@@ -454,40 +460,48 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
       }
     });
 
-    // Remove all items and recreate based on quantities
+    // Auto-build layout: flow placement left-to-right, top-to-bottom within board bounds
     const finalItems: CanvasItem[] = [];
-    
-    assetItems.forEach((templateItem, assetId) => {
-      const quantity = itemQuantities[assetId] || 1;
-      const offset = inchesToPx(0.25);
-      
+    let cursorX = marginPx;
+    let cursorY = marginPx;
+    let rowMaxHeight = 0;
+
+    assetItems.forEach((templateItem, _assetId) => {
+      const quantity = itemQuantities[templateItem.assetId] || 1;
+      const itemWidth = templateItem.width;
+      const itemHeight = templateItem.height;
+
       for (let i = 0; i < quantity; i++) {
-        if (i === 0) {
-          // Keep original item
-          finalItems.push(templateItem);
-        } else {
-          // Create duplicates
-          let newX = templateItem.x + (i % 5) * (templateItem.width + offset);
-          let newY = templateItem.y + Math.floor(i / 5) * (templateItem.height + offset);
-
-          // Clamp to board bounds
-          if (newX + templateItem.width > boardWidth) {
-            newX = offset;
-            newY += templateItem.height + offset;
-          }
-          if (newY + templateItem.height > boardHeight) {
-            newY = offset;
-          }
-
-          const newItem: CanvasItem = {
-            ...templateItem,
-            id: uuidv4(),
-            x: newX,
-            y: newY,
-            zIndex: zIndexCounter++,
-          };
-          finalItems.push(newItem);
+        // Wrap to next row if item doesn't fit horizontally
+        if (cursorX + itemWidth > boardWidth - marginPx && cursorX > marginPx) {
+          cursorX = marginPx;
+          cursorY += rowMaxHeight + spacingPx;
+          rowMaxHeight = 0;
         }
+
+        // Stop if item doesn't fit vertically
+        if (cursorY + itemHeight > boardHeight - marginPx) {
+          break;
+        }
+
+        const newItem: CanvasItem = {
+          ...templateItem,
+          id: i === 0 ? templateItem.id : uuidv4(),
+          x: cursorX,
+          y: cursorY,
+          zIndex: i === 0 ? templateItem.zIndex : zIndexCounter++,
+        };
+        finalItems.push(newItem);
+
+        cursorX += itemWidth + spacingPx;
+        rowMaxHeight = Math.max(rowMaxHeight, itemHeight);
+      }
+
+      // After each asset group, move to next row for separation
+      if (cursorX > marginPx) {
+        cursorX = marginPx;
+        cursorY += rowMaxHeight + spacingPx;
+        rowMaxHeight = 0;
       }
     });
 

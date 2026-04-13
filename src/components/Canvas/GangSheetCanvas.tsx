@@ -193,6 +193,26 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
     [displayScale, updateItem]
   );
 
+  // Create checkered pattern image for background (indicates transparency/empty areas)
+  const checkerPattern = useMemo(() => {
+    const size = 16;
+    const patternCanvas = document.createElement('canvas');
+    patternCanvas.width = size;
+    patternCanvas.height = size;
+    const ctx = patternCanvas.getContext('2d');
+    if (ctx) {
+      ctx.fillStyle = '#D0D0D0';
+      ctx.fillRect(0, 0, size / 2, size / 2);
+      ctx.fillRect(size / 2, size / 2, size / 2, size / 2);
+      ctx.fillStyle = '#EBEBEB';
+      ctx.fillRect(size / 2, 0, size / 2, size / 2);
+      ctx.fillRect(0, size / 2, size / 2, size / 2);
+    }
+    const img = new window.Image();
+    img.src = patternCanvas.toDataURL();
+    return img;
+  }, []);
+
   // Sort items by zIndex for rendering order
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => a.zIndex - b.zIndex);
@@ -206,7 +226,7 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
       onClick={handleStageClick}
       onTap={handleStageClick}
     >
-      {/* Background Layer (white for export) */}
+      {/* Background Layer (checkered pattern for editor visibility; hidden on export) */}
       <Layer name="backgroundLayer">
         <Rect
           name="background"
@@ -214,7 +234,8 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
           y={0}
           width={displayWidth}
           height={displayHeight}
-          fill="#FFFFFF"
+          fillPatternImage={checkerPattern}
+          fillPatternRepeat="repeat"
         />
       </Layer>
 
