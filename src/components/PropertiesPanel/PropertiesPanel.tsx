@@ -5,9 +5,12 @@ import { pxToInches, inchesToPx } from '../../types';
 import type { Asset, CanvasItem } from '../../types';
 import { loadImageFile } from '../../utils/export';
 
-export const PropertiesPanel: React.FC = () => {
+export const PropertiesPanel: React.FC<{
+  onAddSheet?: () => void;
+  onSwitchSheet?: (id: string) => void;
+}> = ({ onAddSheet, onSwitchSheet }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const {
     items,
     selectedIds,
@@ -19,6 +22,11 @@ export const PropertiesPanel: React.FC = () => {
     autoFillSheet,
     addAsset,
     addItem,
+    sheets,
+    activeSheetId,
+    addSheet,
+    switchSheet,
+    deleteSheet,
   } = useEditorStore();
 
   // Get selected item info
@@ -107,56 +115,87 @@ export const PropertiesPanel: React.FC = () => {
 
   return (
     <div className="w-80 bg-gray-50 border-l border-gray-200 flex flex-col h-full">
-      {/* Header */}
-      <div className="p-4 bg-white border-b border-gray-200">
-        <div className="flex items-center justify-between">
+      {/* Sheet List Header */}
+      <div className="p-3 bg-white border-b border-gray-200">
+        <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-semibold text-gray-700">
-            (1) Active Gang Sheets
+            ({sheets.length}) Gang Sheet{sheets.length > 1 ? 's' : ''}
           </h2>
+          <button
+            onClick={() => onAddSheet ? onAddSheet() : addSheet()}
+            className="flex items-center gap-1 px-2 py-1 bg-blue-500 hover:bg-blue-600
+                       text-white text-xs font-medium rounded-lg transition-colors"
+            title="Add new design sheet"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            New Sheet
+          </button>
+        </div>
+
+        {/* Sheet tabs */}
+        <div className="flex flex-col gap-1 max-h-44 overflow-y-auto">
+          {sheets.map((sheet) => {
+            const isActive = sheet.id === activeSheetId;
+            const sheetItemCount = isActive ? items.length : sheet.items.length;
+            return (
+              <div
+                key={sheet.id}
+                className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-all
+                  ${isActive
+                    ? 'bg-blue-50 border border-blue-400'
+                    : 'bg-gray-100 border border-transparent hover:border-blue-300 hover:bg-blue-50/50'
+                  }`}
+                onClick={() => !isActive && (onSwitchSheet ? onSwitchSheet(sheet.id) : switchSheet(sheet.id))}
+              >
+                {sheet.thumbnailUrl ? (
+                  <img src={sheet.thumbnailUrl} alt={sheet.label}
+                       className="w-10 h-8 object-contain rounded bg-white border border-gray-200 shrink-0" />
+                ) : (
+                  <div className="w-10 h-8 bg-white border border-gray-200 rounded flex items-center justify-center shrink-0">
+                    <svg className="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className={`text-xs font-medium truncate ${isActive ? 'text-blue-700' : 'text-gray-700'}`}>
+                    {sheet.label}
+                  </p>
+                  <p className="text-[10px] text-gray-400">
+                    {isActive ? boardSize.label : sheet.boardSize.label} · {sheetItemCount} img
+                  </p>
+                </div>
+                {isActive && (
+                  <span className="text-[9px] bg-blue-500 text-white px-1.5 py-0.5 rounded-full font-medium shrink-0">
+                    Active
+                  </span>
+                )}
+                {sheets.length > 1 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteSheet(sheet.id); }}
+                    className="w-4 h-4 flex items-center justify-center text-gray-400
+                               hover:text-red-500 transition-colors shrink-0"
+                    title="Delete sheet"
+                  >×</button>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
       {/* Active Sheet Info */}
-      <div className="p-4 bg-white border-b border-gray-200">
-        <div className="flex items-start gap-3">
-          {/* Sheet Icon */}
-          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-
-          {/* Sheet Details */}
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-700">{boardSize.label}</span>
-              <button className="text-gray-400 hover:text-blue-500 transition-colors">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mt-0.5">New Gang Sheet</p>
-            <p className="text-xs text-gray-400">{totalImages} Images</p>
-          </div>
-        </div>
-
-        {/* Quantity */}
-        <div className="mt-3 flex items-center gap-2">
-          <span className="text-xs text-gray-500">Qty:</span>
-          <input
-            type="number"
-            min="1"
-            defaultValue="1"
-            className="w-14 px-2 py-1 border border-gray-300 rounded text-xs text-center
-                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+      <div className="p-3 bg-white border-b border-gray-200">
+        <div className="flex items-center justify-between text-xs text-gray-500">
+          <span className="font-medium text-gray-700">{boardSize.label}</span>
+          <span>{totalImages} images</span>
           <button
             onClick={duplicateSelectedItems}
             disabled={selectedIds.length === 0}
-            className="ml-auto text-xs text-blue-500 hover:text-blue-600 font-medium"
+            className="text-blue-500 hover:text-blue-600 font-medium disabled:opacity-40"
           >
             Duplicate
           </button>
@@ -206,34 +245,6 @@ export const PropertiesPanel: React.FC = () => {
           className="hidden"
         />
         
-        <button 
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-600 
-                           hover:bg-white hover:shadow-sm rounded-lg transition-all group">
-          <div className="w-8 h-8 bg-gray-100 group-hover:bg-blue-50 rounded-lg flex items-center justify-center transition-colors">
-            <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-          </div>
-          <span>Add new design</span>
-        </button>
-
-        <button 
-          onClick={() => {
-            // For now, show a message that this feature is coming
-            alert('Previous designs feature coming soon! Your designs will be saved in browser storage.');
-          }}
-          className="w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm text-gray-600 
-                           hover:bg-white hover:shadow-sm rounded-lg transition-all group">
-          <div className="w-8 h-8 bg-gray-100 group-hover:bg-blue-50 rounded-lg flex items-center justify-center transition-colors">
-            <svg className="w-4 h-4 text-gray-400 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                    d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-            </svg>
-          </div>
-          <span>Open from previous designs</span>
-        </button>
-
         <button 
           onClick={autoFillSheet}
           disabled={selectedIds.length === 0}

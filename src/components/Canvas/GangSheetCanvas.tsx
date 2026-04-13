@@ -36,6 +36,7 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
     zoomLevel,
     checkOverflow,
     hasOverflow,
+    checkOverlap,
   } = useEditorStore();
 
   // Calculate board dimensions in pixels at 300 DPI
@@ -52,10 +53,11 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
     setDisplayScale(Math.max(0.01, newScale));
   }, [containerWidth, containerHeight, boardPxWidth, boardPxHeight, setDisplayScale, zoomLevel]);
 
-  // Check for overflow when items change
+  // Check for overflow and overlap when items change
   useEffect(() => {
     checkOverflow();
-  }, [items, checkOverflow]);
+    checkOverlap();
+  }, [items, checkOverflow, checkOverlap]);
 
   // Displayed dimensions
   const displayWidth = boardPxWidth * displayScale;

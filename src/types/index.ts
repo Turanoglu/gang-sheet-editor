@@ -97,6 +97,17 @@ export interface ItemQuantity {
   quantity: number;
 }
 
+// Sheet snapshot for multi-board support
+export interface SheetData {
+  id: string;
+  label: string;
+  items: CanvasItem[];
+  assets: Record<string, Asset>;
+  boardSize: BoardSize;
+  itemQuantities: Record<string, number>;
+  thumbnailUrl?: string;
+}
+
 // Editor state
 export interface EditorState {
   // Board settings
@@ -123,12 +134,19 @@ export interface EditorState {
   gridVisible: boolean;
   zoomLevel: number; // 0.1 to 2.0 (10% to 200%)
   marginInches: number; // Margin between items in inches
-  
+
   // Quantity for each asset
   itemQuantities: Record<string, number>;
-  
+
   // Overflow warning
   hasOverflow: boolean;
+
+  // Overlap warning
+  hasOverlap: boolean;
+
+  // Multi-sheet
+  sheets: SheetData[];
+  activeSheetId: string;
 }
 
 // Actions
@@ -189,10 +207,19 @@ export interface EditorActions {
   // Overflow check
   checkOverflow: () => boolean;
   setHasOverflow: (hasOverflow: boolean) => void;
-  
+
+  // Overlap check
+  checkOverlap: () => boolean;
+
   // Position control - move to board edges
   moveToTop: () => void;
   moveToBottom: () => void;
+
+  // Multi-sheet
+  addSheet: (thumbnailUrl?: string) => void;
+  switchSheet: (id: string, thumbnailUrl?: string) => void;
+  deleteSheet: (id: string) => void;
+  updateSheetThumbnail: (id: string, thumbnailUrl: string) => void;
 }
 
 export type EditorStore = EditorState & EditorActions;

@@ -7,12 +7,28 @@ import type {
   Asset,
   CanvasItem,
   AutoFillSettings,
+  SheetData,
 } from '../types';
 import {
   BOARD_SIZES,
   DEFAULT_DPI,
   inchesToPx,
 } from '../types';
+
+// Helper: get axis-aligned bounding box of a (possibly rotated) item
+function getAABB(item: CanvasItem) {
+  if (item.rotation === 0) {
+    return { left: item.x, top: item.y, right: item.x + item.width, bottom: item.y + item.height };
+  }
+  const rad = (item.rotation * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(rad));
+  const sin = Math.abs(Math.sin(rad));
+  const cx = item.x + item.width / 2;
+  const cy = item.y + item.height / 2;
+  const hw = (item.width * cos + item.height * sin) / 2;
+  const hh = (item.width * sin + item.height * cos) / 2;
+  return { left: cx - hw, top: cy - hh, right: cx + hw, bottom: cy + hh };
+}
 
 const DEFAULT_AUTO_FILL_SETTINGS: AutoFillSettings = {
   mode: 'repeat-selected',
@@ -21,6 +37,8 @@ const DEFAULT_AUTO_FILL_SETTINGS: AutoFillSettings = {
   align: 'top-left',
   alternateRowOffset: false,
 };
+
+const FIRST_SHEET_ID = uuidv4();
 
 const initialState: EditorState = {
   boardSize: BOARD_SIZES[1], // 22x36 default
@@ -37,6 +55,10 @@ const initialState: EditorState = {
   marginInches: 0.125,
   itemQuantities: {},
   hasOverflow: false,
+  hasOverlap: false,
+  // Multi-sheet
+  sheets: [{ id: FIRST_SHEET_ID, label: 'Sheet 1', items: [], assets: {}, boardSize: BOARD_SIZES[1], itemQuantities: {} }],
+  activeSheetId: FIRST_SHEET_ID,
 };
 
 const MAX_HISTORY_SIZE = 50;
@@ -593,6 +615,123 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
 
   setHasOverflow: (hasOverflow: boolean) => {
     set({ hasOverflow });
+  },
+
+  // Overlap check — AABB pairs
+  checkOverlap: () => {
+    const { items } = get();
+    let hasOverlap = false;
+
+    outer: for (let i = 0; i < items.length; i++) {
+      const a = getAABB(items[i]);
+      for (let j = i + 1; j < items.length; j++) {
+        const b = getAABB(items[j]);
+        if (!(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top)) {
+          hasOverlap = true;
+          break outer;
+        }
+      }
+    }
+
+    set({ hasOverlap });
+    return hasOverlap;
+  },
+
+  // Multi-sheet
+  addSheet: (thumbnailUrl?: string) => {
+    const { sheets, activeSheetId, items, assets, boardSize, itemQuantities } = get();
+
+    // Snapshot current active sheet
+    const updatedSheets: SheetData[] = sheets.map((s) =>
+      s.id === activeSheetId
+        ? { ...s, items, assets, boardSize, itemQuantities, thumbnailUrl: thumbnailUrl ?? s.thumbnailUrl }
+        : s
+    );
+
+    const newId = uuidv4();
+    const newSheet: SheetData = {
+      id: newId,
+      label: `Sheet ${updatedSheets.length + 1}`,
+      items: [],
+      assets: {},
+      boardSize: BOARD_SIZES[1],
+      itemQuantities: {},
+    };
+
+    set({
+      sheets: [...updatedSheets, newSheet],
+      activeSheetId: newId,
+      items: [],
+      assets: {},
+      boardSize: BOARD_SIZES[1],
+      itemQuantities: {},
+      selectedIds: [],
+      history: [],
+      historyIndex: -1,
+      hasOverflow: false,
+      hasOverlap: false,
+    });
+  },
+
+  switchSheet: (id: string, thumbnailUrl?: string) => {
+    const { sheets, activeSheetId, items, assets, boardSize, itemQuantities } = get();
+    if (id === activeSheetId) return;
+
+    // Save current state back into active sheet
+    const updatedSheets: SheetData[] = sheets.map((s) =>
+      s.id === activeSheetId
+        ? { ...s, items, assets, boardSize, itemQuantities, thumbnailUrl: thumbnailUrl ?? s.thumbnailUrl }
+        : s
+    );
+
+    const target = updatedSheets.find((s) => s.id === id);
+    if (!target) return;
+
+    set({
+      sheets: updatedSheets,
+      activeSheetId: id,
+      items: target.items,
+      assets: target.assets,
+      boardSize: target.boardSize,
+      itemQuantities: target.itemQuantities,
+      selectedIds: [],
+      history: [],
+      historyIndex: -1,
+      hasOverflow: false,
+      hasOverlap: false,
+    });
+  },
+
+  deleteSheet: (id: string) => {
+    const { sheets, activeSheetId } = get();
+    if (sheets.length <= 1) return; // always keep at least one sheet
+
+    const remaining = sheets.filter((s) => s.id !== id);
+
+    if (id === activeSheetId) {
+      const next = remaining[0];
+      set({
+        sheets: remaining,
+        activeSheetId: next.id,
+        items: next.items,
+        assets: next.assets,
+        boardSize: next.boardSize,
+        itemQuantities: next.itemQuantities,
+        selectedIds: [],
+        history: [],
+        historyIndex: -1,
+        hasOverflow: false,
+        hasOverlap: false,
+      });
+    } else {
+      set({ sheets: remaining });
+    }
+  },
+
+  updateSheetThumbnail: (id: string, thumbnailUrl: string) => {
+    set((state) => ({
+      sheets: state.sheets.map((s) => (s.id === id ? { ...s, thumbnailUrl } : s)),
+    }));
   },
 
   loadDesign: async (design) => {
