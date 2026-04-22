@@ -618,15 +618,22 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
   },
 
   // Overlap check — AABB pairs
+  // 1px tolerance avoids false positives from floating-point rounding in auto-build layout
   checkOverlap: () => {
     const { items } = get();
+    const TOLERANCE = 1; // px
     let hasOverlap = false;
 
     outer: for (let i = 0; i < items.length; i++) {
       const a = getAABB(items[i]);
       for (let j = i + 1; j < items.length; j++) {
         const b = getAABB(items[j]);
-        if (!(a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top)) {
+        if (
+          a.right - b.left > TOLERANCE &&
+          b.right - a.left > TOLERANCE &&
+          a.bottom - b.top > TOLERANCE &&
+          b.bottom - a.top > TOLERANCE
+        ) {
           hasOverlap = true;
           break outer;
         }
