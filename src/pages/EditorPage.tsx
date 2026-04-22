@@ -43,6 +43,9 @@ export const EditorPage: React.FC = () => {
     hasOverlap,
     items,
     assets,
+    itemQuantities,
+    sheets,
+    activeSheetId,
     loadDesign,
     addSheet,
     switchSheet,
@@ -212,53 +215,81 @@ export const EditorPage: React.FC = () => {
     }
   };
 
-  // Create design object from current state
-  const createDesignObject = (): GangSheetDesign => {
-    // Generate thumbnail for preview (800px)
-    const thumbnailUrl = generateThumbnail('thumbnail');
-
-    // Generate print-ready export (150 DPI - suitable for DTF printing)
-    const fullExportUrl = generateThumbnail('print');
-
-    return {
-      id: editingDesign?.id ?? uuidv4(),
-      name: editingDesign?.name ?? 'New Gang Sheet',
-      boardSize,
-      imageCount: items.length,
-      createdAt: editingDesign?.createdAt ?? new Date(),
-      updatedAt: new Date(),
-      thumbnailUrl,
-      fullExportUrl,
-      canvasData: JSON.stringify(items),
-      assetsData: JSON.stringify(assets),
-    };
-  };
-
   // Handle Save & Add to Cart
   const handleSaveAndAddToCart = () => {
-    if (items.length === 0) {
+    // Build all sheets with the current live state for the active sheet
+    const allSheets = sheets.map((s) =>
+      s.id === activeSheetId
+        ? { ...s, items, assets, boardSize, itemQuantities }
+        : s
+    );
+
+    // Only process sheets that have at least one item
+    const nonEmptySheets = allSheets.filter((s) => s.items.length > 0);
+
+    if (nonEmptySheets.length === 0) {
       alert('Please add at least one image to your gang sheet before adding to cart.');
       return;
     }
 
-    const design = createDesignObject();
-    saveDesign(design);
+    const baseName = editingDesign?.name ?? 'New Gang Sheet';
+    const now = new Date();
 
-    // Create order with 'In Cart' status so it appears in the orders panel immediately
+    // Create a design object for each non-empty sheet
+    const designs: GangSheetDesign[] = nonEmptySheets.map((s, idx) => {
+      const isActive = s.id === activeSheetId;
+      const isEditedSheet = isActive && editingDesign != null;
+
+      // Only the active sheet can have a freshly rendered export;
+      // other sheets use the tiny thumbnail saved when the user last switched away.
+      const thumbnailUrl = isActive ? generateThumbnail('thumbnail') : (s.thumbnailUrl || '');
+      const fullExportUrl = isActive ? generateThumbnail('print') : (s.thumbnailUrl || '');
+
+      const sheetName = nonEmptySheets.length === 1
+        ? baseName
+        : `${baseName} – ${s.label ?? `Sheet ${idx + 1}`}`;
+
+      return {
+        id: isEditedSheet ? editingDesign!.id : uuidv4(),
+        name: sheetName,
+        boardSize: s.boardSize,
+        imageCount: s.items.length,
+        createdAt: isEditedSheet ? editingDesign!.createdAt : now,
+        updatedAt: now,
+        thumbnailUrl,
+        fullExportUrl,
+        canvasData: JSON.stringify(s.items),
+        assetsData: JSON.stringify(s.assets),
+      };
+    });
+
+    // Save all designs to cloud
+    designs.forEach((design) => saveDesign(design));
+
+    // Build cart items (one per sheet) and create a single order
     const customerName = getCustomerName() || 'Customer';
-    const pricePerUnit = getPriceForBoard(design.boardSize.width, design.boardSize.height);
-    const tempCartItem = { id: '', designId: design.id, design, quantity, pricePerUnit, addedAt: new Date() };
-    const order = createOrder(customerName, [tempCartItem], 'In Cart');
+    const orderCartItems = designs.map((design) => ({
+      id: '',
+      designId: design.id,
+      design,
+      quantity,
+      pricePerUnit: getPriceForBoard(design.boardSize.width, design.boardSize.height),
+      addedAt: now,
+    }));
 
-    addToCart(design, quantity, order.id);
+    const order = createOrder(customerName, orderCartItems, 'In Cart');
 
-    // Show success message and open cart
+    // Add each sheet to the cart under the same order
+    designs.forEach((design) => addToCart(design, quantity, order.id));
+
     openCart();
-    
-    // Show a brief success notification
+
+    // Brief success notification
     const notification = document.createElement('div');
     notification.className = 'fixed top-20 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-[100] animate-pulse';
-    notification.textContent = '✓ Added to cart successfully!';
+    notification.textContent = designs.length > 1
+      ? `✓ ${designs.length} gang sheets added to cart!`
+      : '✓ Added to cart successfully!';
     document.body.appendChild(notification);
     setTimeout(() => notification.remove(), 2000);
   };
