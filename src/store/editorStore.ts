@@ -315,6 +315,7 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
       startY = (boardHeight - totalGridHeight) / 2;
     }
 
+    let firstCell = true;
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         let x = startX + col * (itemWidth + spacingPx);
@@ -327,28 +328,26 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
           if (x + itemWidth > boardWidth - marginPx) continue;
         }
 
-        // Skip the original item position (approximately)
-        const isOriginalPosition =
-          Math.abs(x - templateItem.x) < 10 &&
-          Math.abs(y - templateItem.y) < 10;
-
-        if (isOriginalPosition) continue;
-
-        const newItem: CanvasItem = {
-          ...templateItem,
-          id: uuidv4(),
-          x,
-          y,
-          zIndex: maxZIndex + newItems.length + 1,
-        };
-        newItems.push(newItem);
+        if (firstCell) {
+          // Move the template item itself to the first grid cell (keep its id)
+          newItems.push({ ...templateItem, x, y });
+          firstCell = false;
+        } else {
+          newItems.push({
+            ...templateItem,
+            id: uuidv4(),
+            x,
+            y,
+            zIndex: maxZIndex + newItems.length + 1,
+          });
+        }
       }
     }
 
     set((state) => ({
-      items: [...state.items, ...newItems],
-      // Keep original item selected, add new items to selection
-      selectedIds: [templateItem.id, ...newItems.map((i) => i.id)],
+      // Remove template item from its old position, then add the full grid
+      items: [...state.items.filter((i) => i.id !== templateItem.id), ...newItems],
+      selectedIds: newItems.map((i) => i.id),
     }));
   },
 
