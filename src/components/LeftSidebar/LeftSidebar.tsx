@@ -159,8 +159,11 @@ const EditImageModal: React.FC<{
   );
 };
 
-// Place image at its natural pixel size (1 image px = 1 canvas px).
-// Only scale down if the image is larger than the board, preserving aspect ratio.
+// Place image at ~30% of board width by default, preserving exact aspect ratio.
+// Always capped at board dimensions. This gives a consistent, usable starting size
+// regardless of whether the source image is 72 DPI (web) or 300 DPI (print).
+const DEFAULT_BOARD_FRACTION = 0.3;
+
 function getInitialItemSize(
   naturalWidth: number,
   naturalHeight: number,
@@ -168,21 +171,32 @@ function getInitialItemSize(
   boardWidthInches: number,
   boardHeightInches: number
 ): { itemWidth: number; itemHeight: number } {
-  const boardWidthPx = inchesToPx(boardWidthInches, dpi);
+  const boardWidthPx  = inchesToPx(boardWidthInches, dpi);
   const boardHeightPx = inchesToPx(boardHeightInches, dpi);
-  const aspectRatio = naturalWidth / naturalHeight;
+  const aspectRatio   = naturalWidth / naturalHeight;
 
-  let itemWidth = naturalWidth;
-  let itemHeight = naturalHeight;
+  // Target: longer dimension = 30% of board width
+  const targetPx = boardWidthPx * DEFAULT_BOARD_FRACTION;
 
-  if (itemWidth > boardWidthPx) {
-    itemWidth = boardWidthPx;
-    itemHeight = itemWidth / aspectRatio;
+  let itemWidth: number;
+  let itemHeight: number;
+
+  if (naturalWidth >= naturalHeight) {
+    itemWidth  = targetPx;
+    itemHeight = targetPx / aspectRatio;
+  } else {
+    itemHeight = targetPx;
+    itemWidth  = targetPx * aspectRatio;
   }
 
+  // Hard cap: never exceed board dimensions
+  if (itemWidth > boardWidthPx) {
+    itemWidth  = boardWidthPx;
+    itemHeight = itemWidth / aspectRatio;
+  }
   if (itemHeight > boardHeightPx) {
     itemHeight = boardHeightPx;
-    itemWidth = itemHeight * aspectRatio;
+    itemWidth  = itemHeight * aspectRatio;
   }
 
   return { itemWidth, itemHeight };
