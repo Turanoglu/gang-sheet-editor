@@ -159,6 +159,31 @@ const EditImageModal: React.FC<{
   );
 };
 
+// Scale image to initial canvas size while preserving the exact aspect ratio.
+// The longer dimension is capped at MAX_INITIAL_INCHES; the shorter one is derived.
+const MAX_INITIAL_INCHES = 6;
+function getInitialItemSize(
+  naturalWidth: number,
+  naturalHeight: number,
+  dpi: number
+): { itemWidth: number; itemHeight: number } {
+  const maxPx = inchesToPx(MAX_INITIAL_INCHES, dpi);
+  const aspectRatio = naturalWidth / naturalHeight;
+
+  let itemWidth: number;
+  let itemHeight: number;
+
+  if (naturalWidth >= naturalHeight) {
+    itemWidth = Math.min(naturalWidth, maxPx);
+    itemHeight = itemWidth / aspectRatio;
+  } else {
+    itemHeight = Math.min(naturalHeight, maxPx);
+    itemWidth = itemHeight * aspectRatio;
+  }
+
+  return { itemWidth, itemHeight };
+}
+
 export const LeftSidebar: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -258,23 +283,7 @@ export const LeftSidebar: React.FC = () => {
 
           addAsset(asset);
 
-          const maxInitialWidth = inchesToPx(6, dpi);
-          const maxInitialHeight = inchesToPx(6, dpi);
-
-          let itemWidth = width;
-          let itemHeight = height;
-
-          if (itemWidth > maxInitialWidth) {
-            const scale = maxInitialWidth / itemWidth;
-            itemWidth = maxInitialWidth;
-            itemHeight = itemHeight * scale;
-          }
-
-          if (itemHeight > maxInitialHeight) {
-            const scale = maxInitialHeight / itemHeight;
-            itemHeight = maxInitialHeight;
-            itemWidth = itemWidth * scale;
-          }
+          const { itemWidth, itemHeight } = getInitialItemSize(width, height, dpi);
 
           const canvasItem: CanvasItem = {
             id: uuidv4(),
@@ -350,23 +359,7 @@ export const LeftSidebar: React.FC = () => {
 
         addAsset(asset);
 
-        const maxInitialWidth = inchesToPx(6, dpi);
-        const maxInitialHeight = inchesToPx(6, dpi);
-
-        let itemWidth = width;
-        let itemHeight = height;
-
-        if (itemWidth > maxInitialWidth) {
-          const scale = maxInitialWidth / itemWidth;
-          itemWidth = maxInitialWidth;
-          itemHeight = itemHeight * scale;
-        }
-
-        if (itemHeight > maxInitialHeight) {
-          const scale = maxInitialHeight / itemHeight;
-          itemHeight = maxInitialHeight;
-          itemWidth = itemWidth * scale;
-        }
+        const { itemWidth, itemHeight } = getInitialItemSize(width, height, dpi);
 
         const canvasItem: CanvasItem = {
           id: uuidv4(),
@@ -448,22 +441,7 @@ export const LeftSidebar: React.FC = () => {
     const asset = assets[assetId];
     if (!asset) return;
 
-    const maxInitialWidth = inchesToPx(6, dpi);
-    const maxInitialHeight = inchesToPx(6, dpi);
-
-    let itemWidth = asset.originalWidth;
-    let itemHeight = asset.originalHeight;
-
-    if (itemWidth > maxInitialWidth) {
-      const scale = maxInitialWidth / itemWidth;
-      itemWidth = maxInitialWidth;
-      itemHeight = itemHeight * scale;
-    }
-    if (itemHeight > maxInitialHeight) {
-      const scale = maxInitialHeight / itemHeight;
-      itemHeight = maxInitialHeight;
-      itemWidth = itemWidth * scale;
-    }
+    const { itemWidth, itemHeight } = getInitialItemSize(asset.originalWidth, asset.originalHeight, dpi);
 
     const canvasItem: CanvasItem = {
       id: uuidv4(),
