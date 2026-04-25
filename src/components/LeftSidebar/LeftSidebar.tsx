@@ -159,25 +159,29 @@ const EditImageModal: React.FC<{
   );
 };
 
-// Scale image to initial canvas size while preserving the exact aspect ratio.
-// The longer dimension is capped at MAX_INITIAL_INCHES; the shorter one is derived.
-const MAX_INITIAL_INCHES = 6;
+// Place image at its natural pixel size (1 image px = 1 canvas px).
+// Only scale down if the image is larger than the board, preserving aspect ratio.
 function getInitialItemSize(
   naturalWidth: number,
   naturalHeight: number,
-  dpi: number
+  dpi: number,
+  boardWidthInches: number,
+  boardHeightInches: number
 ): { itemWidth: number; itemHeight: number } {
-  const maxPx = inchesToPx(MAX_INITIAL_INCHES, dpi);
+  const boardWidthPx = inchesToPx(boardWidthInches, dpi);
+  const boardHeightPx = inchesToPx(boardHeightInches, dpi);
   const aspectRatio = naturalWidth / naturalHeight;
 
-  let itemWidth: number;
-  let itemHeight: number;
+  let itemWidth = naturalWidth;
+  let itemHeight = naturalHeight;
 
-  if (naturalWidth >= naturalHeight) {
-    itemWidth = Math.min(naturalWidth, maxPx);
+  if (itemWidth > boardWidthPx) {
+    itemWidth = boardWidthPx;
     itemHeight = itemWidth / aspectRatio;
-  } else {
-    itemHeight = Math.min(naturalHeight, maxPx);
+  }
+
+  if (itemHeight > boardHeightPx) {
+    itemHeight = boardHeightPx;
     itemWidth = itemHeight * aspectRatio;
   }
 
@@ -195,6 +199,7 @@ export const LeftSidebar: React.FC = () => {
   const {
     assets,
     items,
+    boardSize,
     addAsset,
     addItem,
     selectedIds,
@@ -283,7 +288,7 @@ export const LeftSidebar: React.FC = () => {
 
           addAsset(asset);
 
-          const { itemWidth, itemHeight } = getInitialItemSize(width, height, dpi);
+          const { itemWidth, itemHeight } = getInitialItemSize(width, height, dpi, boardSize.width, boardSize.height);
 
           const canvasItem: CanvasItem = {
             id: uuidv4(),
@@ -359,7 +364,7 @@ export const LeftSidebar: React.FC = () => {
 
         addAsset(asset);
 
-        const { itemWidth, itemHeight } = getInitialItemSize(width, height, dpi);
+        const { itemWidth, itemHeight } = getInitialItemSize(width, height, dpi, boardSize.width, boardSize.height);
 
         const canvasItem: CanvasItem = {
           id: uuidv4(),
@@ -441,7 +446,7 @@ export const LeftSidebar: React.FC = () => {
     const asset = assets[assetId];
     if (!asset) return;
 
-    const { itemWidth, itemHeight } = getInitialItemSize(asset.originalWidth, asset.originalHeight, dpi);
+    const { itemWidth, itemHeight } = getInitialItemSize(asset.originalWidth, asset.originalHeight, dpi, boardSize.width, boardSize.height);
 
     const canvasItem: CanvasItem = {
       id: uuidv4(),
