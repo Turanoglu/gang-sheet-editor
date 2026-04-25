@@ -159,10 +159,11 @@ const EditImageModal: React.FC<{
   );
 };
 
-// Place image at ~30% of board width by default, preserving exact aspect ratio.
-// Always capped at board dimensions. This gives a consistent, usable starting size
-// regardless of whether the source image is 72 DPI (web) or 300 DPI (print).
-const DEFAULT_BOARD_FRACTION = 0.3;
+// Place image at its natural pixel size (1 image px = 1 canvas px at the given DPI).
+// This preserves print resolution: natural_px / dpi = correct print inches.
+// Scale DOWN only if the image exceeds board dimensions (aspect ratio preserved).
+// Scale UP only if the image would be invisibly small (< 1 inch on longer side).
+const MIN_INITIAL_INCHES = 1;
 
 function getInitialItemSize(
   naturalWidth: number,
@@ -173,23 +174,13 @@ function getInitialItemSize(
 ): { itemWidth: number; itemHeight: number } {
   const boardWidthPx  = inchesToPx(boardWidthInches, dpi);
   const boardHeightPx = inchesToPx(boardHeightInches, dpi);
+  const minPx         = inchesToPx(MIN_INITIAL_INCHES, dpi);
   const aspectRatio   = naturalWidth / naturalHeight;
 
-  // Target: longer dimension = 30% of board width
-  const targetPx = boardWidthPx * DEFAULT_BOARD_FRACTION;
+  let itemWidth  = naturalWidth;
+  let itemHeight = naturalHeight;
 
-  let itemWidth: number;
-  let itemHeight: number;
-
-  if (naturalWidth >= naturalHeight) {
-    itemWidth  = targetPx;
-    itemHeight = targetPx / aspectRatio;
-  } else {
-    itemHeight = targetPx;
-    itemWidth  = targetPx * aspectRatio;
-  }
-
-  // Hard cap: never exceed board dimensions
+  // Scale down if larger than board
   if (itemWidth > boardWidthPx) {
     itemWidth  = boardWidthPx;
     itemHeight = itemWidth / aspectRatio;
@@ -197,6 +188,14 @@ function getInitialItemSize(
   if (itemHeight > boardHeightPx) {
     itemHeight = boardHeightPx;
     itemWidth  = itemHeight * aspectRatio;
+  }
+
+  // Scale up only if the result would be too tiny to see/work with
+  const longerSide = Math.max(itemWidth, itemHeight);
+  if (longerSide < minPx) {
+    const scale = minPx / longerSide;
+    itemWidth  *= scale;
+    itemHeight *= scale;
   }
 
   return { itemWidth, itemHeight };
