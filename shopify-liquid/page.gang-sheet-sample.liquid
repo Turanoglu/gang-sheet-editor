@@ -32,7 +32,7 @@
 
   <iframe
     id="gang-sheet-wrapper"
-    src="https://gang-sheet-editor.vercel.app/?{% if customer %}customerId={{ customer.id }}&customerEmail={{ customer.email | url_encode }}&{% endif %}shop=inkdyno"
+    src="https://gang-sheet-editor.vercel.app/?{% if customer %}customerId={{ customer.id }}&customerEmail={{ customer.email | url_encode }}&customerName={{ customer.first_name | append: ' ' | append: customer.last_name | strip | url_encode }}&shopDomain={{ shop.permanent_domain | url_encode }}&{% endif %}shop=inkdyno"
     allow="clipboard-read; clipboard-write"
   ></iframe>
 
