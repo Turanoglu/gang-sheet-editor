@@ -430,15 +430,15 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
   },
 
   setZoomLevel: (level: number) => {
-    set({ zoomLevel: Math.max(0.1, Math.min(2.0, level)) });
+    set({ zoomLevel: Math.max(0.05, Math.min(10.0, level)) });
   },
 
   zoomIn: () => {
-    set((state) => ({ zoomLevel: Math.min(2.0, state.zoomLevel + 0.1) }));
+    set((state) => ({ zoomLevel: Math.min(10.0, state.zoomLevel + 0.1) }));
   },
 
   zoomOut: () => {
-    set((state) => ({ zoomLevel: Math.max(0.1, state.zoomLevel - 0.1) }));
+    set((state) => ({ zoomLevel: Math.max(0.05, state.zoomLevel - 0.1) }));
   },
 
   setMarginInches: (margin: number) => {

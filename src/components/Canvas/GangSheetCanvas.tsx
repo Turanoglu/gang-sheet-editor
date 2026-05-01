@@ -387,7 +387,7 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
           ]}
           anchorSize={11}
           anchorCornerRadius={6}
-          anchorFill="#ffffff"
+          anchorFill="transparent"
           anchorStroke="#3b82f6"
           anchorStrokeWidth={2}
           borderStroke="#3b82f6"

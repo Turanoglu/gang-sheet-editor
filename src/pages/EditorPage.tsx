@@ -49,7 +49,15 @@ export const EditorPage: React.FC = () => {
     loadDesign,
     addSheet,
     switchSheet,
+    zoomLevel,
+    setZoomLevel,
   } = useEditorStore();
+
+  // Refs to read latest values inside non-reactive wheel/mouse handlers
+  const displayScaleRef = useRef(displayScale);
+  useEffect(() => { displayScaleRef.current = displayScale; }, [displayScale]);
+  const zoomLevelRef = useRef(zoomLevel);
+  useEffect(() => { zoomLevelRef.current = zoomLevel; }, [zoomLevel]);
 
   // Capture thumbnail of current sheet then switch / add
   const handleSwitchSheet = useCallback((id: string) => {
@@ -174,9 +182,54 @@ export const EditorPage: React.FC = () => {
     };
   }, [handleKeyDown, handleKeyUp]);
 
-  // Pan mouse handlers
+  // Ctrl+Scroll zoom: non-passive wheel listener (must be added via addEventListener)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const scrollLeft = container.scrollLeft;
+      const scrollTop  = container.scrollTop;
+
+      const curScale = displayScaleRef.current;
+      const curZoom  = zoomLevelRef.current;
+
+      // Board coordinate under the mouse (invariant through zoom)
+      const boardX = (mouseX + scrollLeft) / curScale;
+      const boardY = (mouseY + scrollTop)  / curScale;
+
+      const factor   = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const newZoom  = Math.max(0.05, Math.min(10.0, curZoom * factor));
+      const baseScale = curScale / curZoom;
+      const newScale  = baseScale * newZoom;
+
+      setZoomLevel(newZoom);
+
+      // After React re-renders the stage at newScale, re-center on mouse position
+      requestAnimationFrame(() => {
+        if (!containerRef.current) return;
+        containerRef.current.scrollLeft = boardX * newScale - mouseX;
+        containerRef.current.scrollTop  = boardY * newScale - mouseY;
+      });
+    };
+
+    container.addEventListener('wheel', onWheel, { passive: false });
+    return () => container.removeEventListener('wheel', onWheel);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);  // intentionally empty — reads values via refs
+
+  // Pan mouse handlers (Space key OR middle mouse button)
   const handlePanMouseDown = useCallback((e: React.MouseEvent) => {
-    if (!isPanMode || !containerRef.current) return;
+    const isMiddle = e.button === 1;
+    if (!isMiddle && !isPanMode) return;
+    if (!containerRef.current) return;
+    if (isMiddle) e.preventDefault();
     setIsPanning(true);
     panStartRef.current = {
       x: e.clientX,
@@ -191,7 +244,7 @@ export const EditorPage: React.FC = () => {
     const dx = e.clientX - panStartRef.current.x;
     const dy = e.clientY - panStartRef.current.y;
     containerRef.current.scrollLeft = panStartRef.current.scrollLeft - dx;
-    containerRef.current.scrollTop = panStartRef.current.scrollTop - dy;
+    containerRef.current.scrollTop  = panStartRef.current.scrollTop  - dy;
   }, [isPanning]);
 
   const handlePanMouseUp = useCallback(() => {
@@ -415,7 +468,7 @@ export const EditorPage: React.FC = () => {
                 `,
                 backgroundSize: '20px 20px',
                 backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px',
-                cursor: isPanMode ? (isPanning ? 'grabbing' : 'grab') : undefined,
+                cursor: isPanning ? 'grabbing' : isPanMode ? 'grab' : undefined,
               }}
               onMouseDown={handlePanMouseDown}
               onMouseMove={handlePanMouseMove}
