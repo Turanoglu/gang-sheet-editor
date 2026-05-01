@@ -22,6 +22,10 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
   setDisplayScale,
 }) => {
   const transformerRef = useRef<Konva.Transformer>(null);
+  const selectionRectRef = useRef<Konva.Rect>(null);
+  const isSelectingRef = useRef(false);
+  const selectionStartRef = useRef({ x: 0, y: 0 });
+  const didMarqueeRef = useRef(false);
 
   const {
     boardSize,
@@ -109,10 +113,99 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
     transformer.getLayer()?.batchDraw();
   }, [selectedIds, items, stageRef]);
 
-  // Handle stage click (deselect)
+  // Marquee selection: mouse down on background starts a drag-to-select rect
+  const handleMouseDown = useCallback(
+    (e: Konva.KonvaEventObject<MouseEvent>) => {
+      const isBackground =
+        e.target === e.currentTarget ||
+        e.target.name() === 'background' ||
+        e.target.name() === 'grid';
+      if (!isBackground) return;
+
+      const stage = stageRef.current;
+      const pos = stage?.getPointerPosition();
+      if (!pos) return;
+
+      isSelectingRef.current = true;
+      selectionStartRef.current = pos;
+
+      const rect = selectionRectRef.current;
+      if (rect) {
+        rect.setAttrs({ x: pos.x, y: pos.y, width: 0, height: 0, visible: false });
+        rect.getLayer()?.batchDraw();
+      }
+    },
+    [stageRef]
+  );
+
+  const handleMouseMove = useCallback(
+    (_e: Konva.KonvaEventObject<MouseEvent>) => {
+      if (!isSelectingRef.current) return;
+
+      const stage = stageRef.current;
+      const pos = stage?.getPointerPosition();
+      if (!pos) return;
+
+      const start = selectionStartRef.current;
+      const x = Math.min(start.x, pos.x);
+      const y = Math.min(start.y, pos.y);
+      const w = Math.abs(pos.x - start.x);
+      const h = Math.abs(pos.y - start.y);
+
+      const rect = selectionRectRef.current;
+      if (rect) {
+        rect.setAttrs({ x, y, width: w, height: h, visible: w > 4 || h > 4 });
+        rect.getLayer()?.batchDraw();
+      }
+    },
+    [stageRef]
+  );
+
+  const handleMouseUp = useCallback(
+    (_e: Konva.KonvaEventObject<MouseEvent>) => {
+      if (!isSelectingRef.current) return;
+      isSelectingRef.current = false;
+
+      const rect = selectionRectRef.current;
+      if (!rect || !rect.visible()) return;
+
+      rect.visible(false);
+      rect.getLayer()?.batchDraw();
+      didMarqueeRef.current = true;
+
+      const selBox = rect.getClientRect();
+      const stage = stageRef.current;
+      if (!stage) return;
+
+      const newSelectedIds: string[] = [];
+      items.forEach((item) => {
+        const node = stage.findOne(`#item-${item.id}`) as Konva.Node | undefined;
+        if (!node) return;
+        const nodeBox = node.getClientRect();
+        if (
+          nodeBox.x < selBox.x + selBox.width &&
+          nodeBox.x + nodeBox.width > selBox.x &&
+          nodeBox.y < selBox.y + selBox.height &&
+          nodeBox.y + nodeBox.height > selBox.y
+        ) {
+          newSelectedIds.push(item.id);
+        }
+      });
+
+      if (newSelectedIds.length > 0) {
+        setSelectedIds(newSelectedIds);
+      }
+    },
+    [stageRef, items, setSelectedIds]
+  );
+
+  // Handle stage click (deselect) — skip if a marquee drag just ended
   const handleStageClick = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
-      // Only deselect if clicking on the stage/background, not on an item
+      if (didMarqueeRef.current) {
+        didMarqueeRef.current = false;
+        return;
+      }
       if (e.target === e.currentTarget || e.target.name() === 'background' || e.target.name() === 'grid') {
         clearSelection();
       }
@@ -227,6 +320,9 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
       height={displayHeight}
       onClick={handleStageClick}
       onTap={handleStageClick}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
     >
       {/* Background Layer (checkered pattern for editor visibility; hidden on export) */}
       <Layer name="backgroundLayer">
@@ -297,6 +393,19 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
             'top-center',
             'bottom-center',
           ]}
+        />
+      </Layer>
+
+      {/* Marquee selection rect layer — always on top */}
+      <Layer name="selectionLayer" listening={false}>
+        <Rect
+          ref={selectionRectRef}
+          fill="rgba(0, 100, 255, 0.08)"
+          stroke="rgba(0, 100, 255, 0.6)"
+          strokeWidth={1}
+          dash={[4, 3]}
+          visible={false}
+          listening={false}
         />
       </Layer>
     </Stage>
