@@ -191,32 +191,41 @@ export const EditorPage: React.FC = () => {
       if (!e.ctrlKey && !e.metaKey) return;
       e.preventDefault();
 
-      const rect = container.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      const scrollLeft = container.scrollLeft;
-      const scrollTop  = container.scrollTop;
-
       const curScale = displayScaleRef.current;
       const curZoom  = zoomLevelRef.current;
 
-      // Board coordinate under the mouse (invariant through zoom)
-      const boardX = (mouseX + scrollLeft) / curScale;
-      const boardY = (mouseY + scrollTop)  / curScale;
+      // Use the stage element's actual screen position so flex-centering offset is
+      // accounted for (scrollLeft alone is 0 when board is smaller than container).
+      const stageEl = stageRef.current?.container();
+      if (!stageEl) return;
+      const stageRect = stageEl.getBoundingClientRect();
 
-      const factor   = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-      const newZoom  = Math.max(0.05, Math.min(10.0, curZoom * factor));
+      // Board coordinate (in board-pixels) under the mouse
+      const boardX = (e.clientX - stageRect.left) / curScale;
+      const boardY = (e.clientY - stageRect.top)  / curScale;
+
+      const factor    = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      const newZoom   = Math.max(0.05, Math.min(10.0, curZoom * factor));
       const baseScale = curScale / curZoom;
       const newScale  = baseScale * newZoom;
 
       setZoomLevel(newZoom);
 
-      // After React re-renders the stage at newScale, re-center on mouse position
-      requestAnimationFrame(() => {
+      // Wait two frames so React re-renders + browser layout completes,
+      // then read the stage's new position and apply the corrective scroll.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
         if (!containerRef.current) return;
-        containerRef.current.scrollLeft = boardX * newScale - mouseX;
-        containerRef.current.scrollTop  = boardY * newScale - mouseY;
-      });
+        const containerRect  = containerRef.current.getBoundingClientRect();
+        const newStageRect   = stageEl.getBoundingClientRect();
+
+        // Stage left/top in scroll-content coordinates (invariant to scrollLeft/Top)
+        const stageInContentX = newStageRect.left - containerRect.left + containerRef.current.scrollLeft;
+        const stageInContentY = newStageRect.top  - containerRect.top  + containerRef.current.scrollTop;
+
+        // Set scroll so the board point under mouse stays fixed
+        containerRef.current.scrollLeft = stageInContentX + boardX * newScale - (e.clientX - containerRect.left);
+        containerRef.current.scrollTop  = stageInContentY + boardY * newScale - (e.clientY - containerRect.top);
+      }));
     };
 
     container.addEventListener('wheel', onWheel, { passive: false });
