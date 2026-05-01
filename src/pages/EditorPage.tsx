@@ -464,10 +464,10 @@ export const EditorPage: React.FC = () => {
               displayScale={displayScale}
             />
 
-            {/* Canvas Container */}
+            {/* Canvas Container — overflow-auto only (no flex-center here) */}
             <div
               ref={containerRef}
-              className="flex-1 flex items-center justify-center bg-slate-500 overflow-auto relative"
+              className="flex-1 bg-slate-500 overflow-auto relative"
               style={{
                 backgroundImage: `
                   linear-gradient(45deg, #64748b 25%, transparent 25%),
@@ -484,10 +484,10 @@ export const EditorPage: React.FC = () => {
               onMouseUp={handlePanMouseUp}
               onMouseLeave={handlePanMouseUp}
             >
-              {/* Warnings */}
-              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50 flex flex-col gap-2 items-center">
+              {/* Warnings — fixed to viewport so they don't scroll away */}
+              <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none">
                 {hasOverflow && (
-                  <div className="bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-pulse">
+                  <div className="bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 animate-pulse pointer-events-auto">
                     <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                             d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -496,7 +496,7 @@ export const EditorPage: React.FC = () => {
                   </div>
                 )}
                 {hasOverlap && (
-                  <div className="bg-amber-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
+                  <div className="bg-amber-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 pointer-events-auto">
                     <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                             d="M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" />
@@ -505,22 +505,33 @@ export const EditorPage: React.FC = () => {
                   </div>
                 )}
               </div>
-              
-              <div className={`relative shadow-2xl rounded-sm overflow-hidden ${hasOverflow ? 'ring-4 ring-red-500 ring-opacity-50' : ''}`}>
-                <GangSheetCanvas
-                  containerWidth={containerSize.width}
-                  containerHeight={containerSize.height}
-                  stageRef={stageRef}
-                  displayScale={displayScale}
-                  setDisplayScale={setDisplayScale}
-                />
-                {/* Pan overlay: blocks Konva interactions while Space is held */}
-                {isPanMode && (
-                  <div
-                    className="absolute inset-0"
-                    style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+
+              {/*
+                Inner wrapper: min-width/height = 100% ensures the scroll area always
+                starts at the true top-left of the board. When board < container it
+                flex-centers the board; when board > container the wrapper grows and
+                scrollTop=0 correctly shows the board's top edge (no negative-offset bug).
+              */}
+              <div
+                className="flex items-center justify-center"
+                style={{ minWidth: '100%', minHeight: '100%' }}
+              >
+                <div className={`relative shadow-2xl rounded-sm overflow-hidden ${hasOverflow ? 'ring-4 ring-red-500 ring-opacity-50' : ''}`}>
+                  <GangSheetCanvas
+                    containerWidth={containerSize.width}
+                    containerHeight={containerSize.height}
+                    stageRef={stageRef}
+                    displayScale={displayScale}
+                    setDisplayScale={setDisplayScale}
                   />
-                )}
+                  {/* Pan overlay: blocks Konva interactions while Space is held */}
+                  {isPanMode && (
+                    <div
+                      className="absolute inset-0"
+                      style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+                    />
+                  )}
+                </div>
               </div>
             </div>
           </div>
