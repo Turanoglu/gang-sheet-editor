@@ -238,14 +238,14 @@ export const LeftSidebar: React.FC = () => {
     ? items.filter(item => item.assetId === selectedItem.assetId).length
     : 1;
 
-  // Sync width/height inputs only when the SELECTED ITEM changes
+  // Sync width/height inputs when selected item dimensions change (including transformer resize)
   useEffect(() => {
     if (selectedItem) {
       setWidthInput(pxToInches(selectedItem.width, dpi).toFixed(2));
       setHeightInput(pxToInches(selectedItem.height, dpi).toFixed(2));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedItem?.id, dpi]);
+  }, [selectedItem?.width, selectedItem?.height, dpi]);
 
   // Sync quantityInput with actual item count when asset changes or items are added/removed
   useEffect(() => {

@@ -376,23 +376,23 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
           ref={transformerRef}
           name="transformer"
           boundBoxFunc={(oldBox, newBox) => {
-            // Limit minimum size
-            if (newBox.width < 10 || newBox.height < 10) {
-              return oldBox;
-            }
+            if (newBox.width < 10 || newBox.height < 10) return oldBox;
             return newBox;
           }}
           rotateEnabled={true}
+          rotateAnchorOffset={24}
           enabledAnchors={[
-            'top-left',
-            'top-right',
-            'bottom-left',
-            'bottom-right',
-            'middle-left',
-            'middle-right',
-            'top-center',
-            'bottom-center',
+            'top-left', 'top-right', 'bottom-left', 'bottom-right',
+            'middle-left', 'middle-right', 'top-center', 'bottom-center',
           ]}
+          anchorSize={11}
+          anchorCornerRadius={6}
+          anchorFill="#ffffff"
+          anchorStroke="#3b82f6"
+          anchorStrokeWidth={2}
+          borderStroke="#3b82f6"
+          borderStrokeWidth={1.5}
+          borderDash={[5, 3]}
         />
       </Layer>
 
