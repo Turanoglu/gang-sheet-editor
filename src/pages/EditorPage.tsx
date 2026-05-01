@@ -427,7 +427,7 @@ export const EditorPage: React.FC = () => {
       </div>
 
       {/* Toolbar */}
-      <Toolbar />
+      <Toolbar isPanMode={isPanMode} onTogglePanMode={() => setIsPanMode(v => !v)} />
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">

@@ -4,7 +4,8 @@ import { BOARD_SIZES } from '../../types';
 import { getCustomerId, getCustomerName, getCustomerEmail, getShopDomain } from '../../services/storageAPI';
 
 interface ToolbarProps {
-  // No props needed anymore
+  isPanMode?: boolean;
+  onTogglePanMode?: () => void;
 }
 
 // Icon Components
@@ -87,6 +88,13 @@ const RefreshIcon = () => (
   </svg>
 );
 
+const HandIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+      d="M7 11.5V14m0-2.5v-6a1.5 1.5 0 013 0m-3 6a1.5 1.5 0 00-3 0v2a7.5 7.5 0 0015 0v-5a1.5 1.5 0 00-3 0m-6-3V11m0-5.5v-1a1.5 1.5 0 013 0v1m0 0V11m0-5.5a1.5 1.5 0 013 0v3m0 0V11" />
+  </svg>
+);
+
 
 const MoveToTopIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -100,7 +108,7 @@ const MoveToBottomIcon = () => (
   </svg>
 );
 
-export const Toolbar: React.FC<ToolbarProps> = () => {
+export const Toolbar: React.FC<ToolbarProps> = ({ isPanMode = false, onTogglePanMode }) => {
   const {
     boardSize,
     setBoardSize,
@@ -189,9 +197,15 @@ export const Toolbar: React.FC<ToolbarProps> = () => {
 
       {/* Tool Buttons */}
       <div className="flex items-center gap-1 pr-3 border-r border-gray-200">
-        <ToolButton 
-          icon={<GridIcon />} 
-          title="Toggle Grid" 
+        <ToolButton
+          icon={<HandIcon />}
+          title="Pan Tool — sürükleyerek kaydır (Space)"
+          onClick={onTogglePanMode}
+          active={isPanMode}
+        />
+        <ToolButton
+          icon={<GridIcon />}
+          title="Toggle Grid"
           onClick={toggleGrid}
           active={gridVisible}
         />
