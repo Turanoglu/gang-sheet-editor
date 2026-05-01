@@ -345,9 +345,11 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     }
 
     set((state) => ({
-      // Remove template item from its old position, then add the full grid
-      items: [...state.items.filter((i) => i.id !== templateItem.id), ...newItems],
+      // Remove ALL items of the same asset (not just the template by id),
+      // so re-running auto-fill doesn't accumulate duplicate grids.
+      items: [...state.items.filter((i) => i.assetId !== templateItem.assetId), ...newItems],
       selectedIds: newItems.map((i) => i.id),
+      hasOverlap: false,
     }));
   },
 
