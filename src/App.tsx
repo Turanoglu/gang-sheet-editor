@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { EditorPage, AdminPanel } from './pages';
 import './App.css';
 
-const SHOPIFY_STORE_URL = 'https://www.inkdyno.com/pages/gang-sheet-sample';
+const SHOPIFY_LOGIN_URL = 'https://www.inkdyno.com/account/login?return_url=%2Fpages%2Fgang-sheet-sample';
 
 function ShopifyAuthGate({ children }: { children: React.ReactNode }) {
   const urlParams = new URLSearchParams(window.location.search);
@@ -24,7 +24,7 @@ function ShopifyAuthGate({ children }: { children: React.ReactNode }) {
             Gang Sheet editörünü kullanmak için Shopify mağazamızdan giriş yapmanız gerekmektedir.
           </p>
           <button
-            onClick={() => { (window.top || window).location.href = SHOPIFY_STORE_URL; }}
+            onClick={() => { (window.top || window).location.href = SHOPIFY_LOGIN_URL; }}
             className="block w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-colors"
           >
             Mağazaya Git
