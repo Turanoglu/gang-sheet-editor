@@ -23,12 +23,12 @@ function ShopifyAuthGate({ children }: { children: React.ReactNode }) {
           <p className="text-gray-500 mb-6 text-sm">
             Gang Sheet editörünü kullanmak için Shopify mağazamızdan giriş yapmanız gerekmektedir.
           </p>
-          <a
-            href={SHOPIFY_STORE_URL}
+          <button
+            onClick={() => { (window.top || window).location.href = SHOPIFY_STORE_URL; }}
             className="block w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-xl transition-colors"
           >
             Mağazaya Git
-          </a>
+          </button>
         </div>
       </div>
     );
