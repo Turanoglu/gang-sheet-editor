@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { EditorPage, AdminPanel } from './pages';
 import './App.css';
 
-const SHOPIFY_STORE_URL = import.meta.env.VITE_SHOPIFY_STORE_URL || 'https://www.inkdyno.com/pages/gang-sheet-sample';
+const SHOPIFY_STORE_URL = 'https://www.inkdyno.com/pages/gang-sheet-sample';
 
 function ShopifyAuthGate({ children }: { children: React.ReactNode }) {
   const urlParams = new URLSearchParams(window.location.search);
