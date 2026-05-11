@@ -177,19 +177,54 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     const boardWidth = getBoardPxWidth();
     const boardHeight = getBoardPxHeight();
 
-    // Try placing to the right first, then below, then clamp
-    let newX = item.x + item.width + spacingPx;
-    let newY = item.y;
+    const findFreePosition = (
+      w: number,
+      h: number,
+      existingItems: CanvasItem[],
+      startX: number,
+      startY: number,
+    ): { x: number; y: number } => {
+      const TOLERANCE = 1;
+      const overlaps = (x: number, y: number) =>
+        existingItems.some(
+          (ei) =>
+            x + w - TOLERANCE > ei.x &&
+            ei.x + ei.width - TOLERANCE > x &&
+            y + h - TOLERANCE > ei.y &&
+            ei.y + ei.height - TOLERANCE > y,
+        );
 
-    if (newX + item.width > boardWidth) {
-      // Doesn't fit to the right → place below
-      newX = item.x;
-      newY = item.y + item.height + spacingPx;
-    }
+      // Try right of source
+      let x = startX + w + spacingPx;
+      let y = startY;
+      if (x + w <= boardWidth && !overlaps(x, y)) return { x, y };
 
-    // Final clamp to board bounds
-    newX = Math.max(0, Math.min(newX, boardWidth - item.width));
-    newY = Math.max(0, Math.min(newY, boardHeight - item.height));
+      // Try below source
+      x = startX;
+      y = startY + h + spacingPx;
+      if (y + h <= boardHeight && !overlaps(x, y)) return { x, y };
+
+      // Scan top-to-bottom, left-to-right for first free slot
+      for (let row = 0; row + h <= boardHeight; row += spacingPx || 1) {
+        for (let col = 0; col + w <= boardWidth; col += spacingPx || 1) {
+          if (!overlaps(col, row)) return { x: col, y: row };
+        }
+      }
+
+      // Fallback: clamp with offset
+      return {
+        x: Math.max(0, Math.min(startX + spacingPx * 2, boardWidth - w)),
+        y: Math.max(0, Math.min(startY + spacingPx * 2, boardHeight - h)),
+      };
+    };
+
+    const { x: newX, y: newY } = findFreePosition(
+      item.width,
+      item.height,
+      items,
+      item.x,
+      item.y,
+    );
 
     const newItem: CanvasItem = {
       ...item,
@@ -220,18 +255,53 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     const newItems: CanvasItem[] = [];
     const newIds: string[] = [];
 
-    selectedItems.forEach((item, index) => {
-      // Try placing to the right first, then below, then clamp
-      let newX = item.x + item.width + spacingPx;
-      let newY = item.y;
+    const TOLERANCE = 1;
+    const overlaps = (x: number, y: number, w: number, h: number, existing: CanvasItem[]) =>
+      existing.some(
+        (ei) =>
+          x + w - TOLERANCE > ei.x &&
+          ei.x + ei.width - TOLERANCE > x &&
+          y + h - TOLERANCE > ei.y &&
+          ei.y + ei.height - TOLERANCE > y,
+      );
 
-      if (newX + item.width > boardWidth) {
-        newX = item.x;
-        newY = item.y + item.height + spacingPx;
+    const findFreePosition = (
+      w: number,
+      h: number,
+      existing: CanvasItem[],
+      startX: number,
+      startY: number,
+    ): { x: number; y: number } => {
+      let x = startX + w + spacingPx;
+      let y = startY;
+      if (x + w <= boardWidth && !overlaps(x, y, w, h, existing)) return { x, y };
+
+      x = startX;
+      y = startY + h + spacingPx;
+      if (y + h <= boardHeight && !overlaps(x, y, w, h, existing)) return { x, y };
+
+      for (let row = 0; row + h <= boardHeight; row += spacingPx || 1) {
+        for (let col = 0; col + w <= boardWidth; col += spacingPx || 1) {
+          if (!overlaps(col, row, w, h, existing)) return { x: col, y: row };
+        }
       }
 
-      newX = Math.max(0, Math.min(newX, boardWidth - item.width));
-      newY = Math.max(0, Math.min(newY, boardHeight - item.height));
+      return {
+        x: Math.max(0, Math.min(startX + spacingPx * 2, boardWidth - w)),
+        y: Math.max(0, Math.min(startY + spacingPx * 2, boardHeight - h)),
+      };
+    };
+
+    const allExisting = [...items];
+
+    selectedItems.forEach((item, index) => {
+      const { x: newX, y: newY } = findFreePosition(
+        item.width,
+        item.height,
+        allExisting,
+        item.x,
+        item.y,
+      );
 
       const newItem: CanvasItem = {
         ...item,
@@ -242,6 +312,7 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
       };
       newItems.push(newItem);
       newIds.push(newItem.id);
+      allExisting.push(newItem);
     });
 
     set((state) => ({

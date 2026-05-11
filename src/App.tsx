@@ -1,16 +1,15 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { EditorPage, AdminPanel } from './pages';
-import { isAuthenticated } from './services/storageAPI';
 import './App.css';
 
 const SHOPIFY_STORE_URL = import.meta.env.VITE_SHOPIFY_STORE_URL || 'https://www.inkdyno.com/pages/gang-sheet-sample';
 
 function ShopifyAuthGate({ children }: { children: React.ReactNode }) {
-  // Allow anonymous access when embedded in Shopify (shop param present in URL)
   const urlParams = new URLSearchParams(window.location.search);
-  const isEmbedded = !!urlParams.get('shop');
+  // Must come through Shopify iframe: requires both 'shop' and 'customerId' in URL
+  const isEmbedded = !!urlParams.get('shop') && !!urlParams.get('customerId');
 
-  if (!isEmbedded && !isAuthenticated()) {
+  if (!isEmbedded) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 text-center">
