@@ -96,6 +96,12 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     }));
   },
 
+  updateAsset: (id: string, updates: Partial<Asset>) => {
+    set((state) => ({
+      assets: { ...state.assets, [id]: { ...state.assets[id], ...updates } },
+    }));
+  },
+
   removeAsset: (id: string) => {
     set((state) => {
       const newAssets = { ...state.assets };

@@ -157,6 +157,7 @@ export interface EditorActions {
 
   // Assets
   addAsset: (asset: Asset) => void;
+  updateAsset: (id: string, updates: Partial<Asset>) => void;
   removeAsset: (id: string) => void;
 
   // Items

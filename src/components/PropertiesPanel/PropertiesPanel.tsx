@@ -1,15 +1,19 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useEditorStore } from '../../store/editorStore';
 import { pxToInches, inchesToPx } from '../../types';
 import type { Asset, CanvasItem } from '../../types';
 import { loadImageFile } from '../../utils/export';
+import { removeBackground, upscaleImage } from '../../utils/imageProcessing';
 
 export const PropertiesPanel: React.FC<{
   onAddSheet?: () => void;
   onSwitchSheet?: (id: string) => void;
 }> = ({ onAddSheet, onSwitchSheet }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [bgRemoving, setBgRemoving] = useState(false);
+  const [upscaling, setUpscaling] = useState(false);
 
   const {
     items,
@@ -21,6 +25,8 @@ export const PropertiesPanel: React.FC<{
     clearAllItems,
     autoFillSheet,
     addAsset,
+    updateAsset,
+    updateItem,
     addItem,
     sheets,
     activeSheetId,
@@ -35,6 +41,38 @@ export const PropertiesPanel: React.FC<{
     : null;
 
   const selectedAsset = selectedItem ? assets[selectedItem.assetId] : null;
+
+  const handleRemoveBackground = async () => {
+    if (!selectedItem || !selectedAsset) return;
+    setBgRemoving(true);
+    try {
+      const newDataUrl = await removeBackground(selectedAsset.dataUrl);
+      const img = new Image();
+      await new Promise<void>((resolve) => { img.onload = () => resolve(); img.src = newDataUrl; });
+      updateAsset(selectedAsset.id, { dataUrl: newDataUrl, imageEl: img });
+    } catch (e) {
+      alert('Arkaplan kaldırma başarısız: ' + (e as Error).message);
+    } finally {
+      setBgRemoving(false);
+    }
+  };
+
+  const handleUpscale = async () => {
+    if (!selectedItem || !selectedAsset) return;
+    setUpscaling(true);
+    try {
+      const { dataUrl: newDataUrl, width: newW, height: newH } = await upscaleImage(selectedAsset.dataUrl, 2);
+      const img = new Image();
+      await new Promise<void>((resolve) => { img.onload = () => resolve(); img.src = newDataUrl; });
+      updateAsset(selectedAsset.id, { dataUrl: newDataUrl, imageEl: img, originalWidth: newW, originalHeight: newH });
+      // Scale canvas item proportionally (2x)
+      updateItem(selectedItem.id, { width: selectedItem.width * 2, height: selectedItem.height * 2 });
+    } catch (e) {
+      alert('Upscale başarısız: ' + (e as Error).message);
+    } finally {
+      setUpscaling(false);
+    }
+  };
 
   // Calculate total images
   const totalImages = items.length;
@@ -230,6 +268,51 @@ export const PropertiesPanel: React.FC<{
               <span className="text-gray-500">Resolution</span>
               <span className="font-medium text-gray-700">{dpi} dpi</span>
             </div>
+          </div>
+
+          {/* Image Tools */}
+          <div className="mt-3 flex flex-col gap-2">
+            <button
+              onClick={handleRemoveBackground}
+              disabled={bgRemoving || upscaling}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg
+                         bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50
+                         disabled:cursor-not-allowed transition-colors"
+            >
+              {bgRemoving ? (
+                <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                </svg>
+              )}
+              {bgRemoving ? 'Arkaplan kaldırılıyor...' : 'Arkaplanı Kaldır'}
+            </button>
+
+            <button
+              onClick={handleUpscale}
+              disabled={bgRemoving || upscaling}
+              className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg
+                         bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-50
+                         disabled:cursor-not-allowed transition-colors"
+            >
+              {upscaling ? (
+                <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+              )}
+              {upscaling ? 'Upscale yapılıyor...' : 'Upscale 2x'}
+            </button>
           </div>
         </div>
       )}
