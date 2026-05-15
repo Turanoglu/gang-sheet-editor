@@ -1,4 +1,6 @@
 import { removeBackground as imglyRemoveBg } from '@imgly/background-removal';
+import Upscaler from 'upscaler';
+import ESRGANSlim from '@upscalerjs/esrgan-slim';
 
 export async function removeBackground(dataUrl: string): Promise<string> {
   const blob = await imglyRemoveBg(dataUrl, {
@@ -12,23 +14,30 @@ export async function removeBackground(dataUrl: string): Promise<string> {
   });
 }
 
-// Canvas-based upscale using Lanczos-approximated bicubic (browser best effort)
-export async function upscaleImage(dataUrl: string, scale = 2): Promise<{ dataUrl: string; width: number; height: number }> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const newW = Math.round(img.naturalWidth * scale);
-      const newH = Math.round(img.naturalHeight * scale);
-      const canvas = document.createElement('canvas');
-      canvas.width = newW;
-      canvas.height = newH;
-      const ctx = canvas.getContext('2d')!;
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(img, 0, 0, newW, newH);
-      resolve({ dataUrl: canvas.toDataURL('image/png'), width: newW, height: newH });
-    };
+let upscalerInstance: InstanceType<typeof Upscaler> | null = null;
+
+function getUpscaler() {
+  if (!upscalerInstance) {
+    upscalerInstance = new Upscaler({ model: ESRGANSlim });
+  }
+  return upscalerInstance;
+}
+
+export async function upscaleImage(dataUrl: string): Promise<{ dataUrl: string; width: number; height: number }> {
+  const upscaler = getUpscaler();
+
+  const img = new Image();
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
     img.onerror = reject;
     img.src = dataUrl;
   });
+
+  const result = await upscaler.upscale(img, { output: 'base64', patchSize: 64, padding: 4 });
+  const newDataUrl = result.startsWith('data:') ? result : `data:image/png;base64,${result}`;
+
+  const out = new Image();
+  await new Promise<void>((resolve) => { out.onload = () => resolve(); out.src = newDataUrl; });
+
+  return { dataUrl: newDataUrl, width: out.naturalWidth, height: out.naturalHeight };
 }

@@ -61,12 +61,13 @@ export const PropertiesPanel: React.FC<{
     if (!selectedItem || !selectedAsset) return;
     setUpscaling(true);
     try {
-      const { dataUrl: newDataUrl, width: newW, height: newH } = await upscaleImage(selectedAsset.dataUrl, 2);
+      const { dataUrl: newDataUrl, width: newW, height: newH } = await upscaleImage(selectedAsset.dataUrl);
       const img = new Image();
       await new Promise<void>((resolve) => { img.onload = () => resolve(); img.src = newDataUrl; });
+      const scaleX = newW / selectedAsset.originalWidth;
+      const scaleY = newH / selectedAsset.originalHeight;
       updateAsset(selectedAsset.id, { dataUrl: newDataUrl, imageEl: img, originalWidth: newW, originalHeight: newH });
-      // Scale canvas item proportionally (2x)
-      updateItem(selectedItem.id, { width: selectedItem.width * 2, height: selectedItem.height * 2 });
+      updateItem(selectedItem.id, { width: selectedItem.width * scaleX, height: selectedItem.height * scaleY });
     } catch (e) {
       alert('Upscale başarısız: ' + (e as Error).message);
     } finally {
