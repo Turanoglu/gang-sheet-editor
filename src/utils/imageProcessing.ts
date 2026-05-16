@@ -1,7 +1,6 @@
 import { removeBackground as imglyRemoveBg } from '@imgly/background-removal';
 import Upscaler from 'upscaler';
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-import ESRGANSlim from '@upscalerjs/esrgan-slim';
+import { x4 as ESRGANx4 } from '@upscalerjs/esrgan-slim';
 
 export async function removeBackground(dataUrl: string): Promise<string> {
   const blob = await imglyRemoveBg(dataUrl, {
@@ -21,7 +20,7 @@ let upscalerInstance: InstanceType<typeof Upscaler> | null = null;
 function getUpscaler() {
   if (!upscalerInstance) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    upscalerInstance = new Upscaler({ model: ESRGANSlim as any });
+    upscalerInstance = new Upscaler({ model: ESRGANx4 as any });
   }
   return upscalerInstance;
 }
