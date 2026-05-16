@@ -59,9 +59,8 @@ export async function upscaleImage(dataUrl: string): Promise<{ dataUrl: string; 
       reject(err);
     };
 
-    // Transfer imageData buffer to worker (zero-copy)
     worker.postMessage(
-      { imageData: imageData.data, width: img.naturalWidth, height: img.naturalHeight },
+      { imageData: imageData.data, width: img.naturalWidth, height: img.naturalHeight, scale: 2 },
       [imageData.data.buffer],
     );
   });
