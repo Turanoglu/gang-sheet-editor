@@ -1,6 +1,4 @@
 import { removeBackground as imglyRemoveBg } from '@imgly/background-removal';
-import Upscaler from 'upscaler';
-import { x2 as ESRGANx2 } from '@upscalerjs/esrgan-slim';
 
 export async function removeBackground(dataUrl: string): Promise<string> {
   const blob = await imglyRemoveBg(dataUrl, {
@@ -15,31 +13,51 @@ export async function removeBackground(dataUrl: string): Promise<string> {
   });
 }
 
-let upscalerInstance: InstanceType<typeof Upscaler> | null = null;
-
-function getUpscaler() {
-  if (!upscalerInstance) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    upscalerInstance = new Upscaler({ model: ESRGANx2 as any });
-  }
-  return upscalerInstance;
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
 }
 
 export async function upscaleImage(dataUrl: string): Promise<{ dataUrl: string; width: number; height: number }> {
-  const upscaler = getUpscaler();
+  const img = await loadImage(dataUrl);
 
-  const img = new Image();
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = reject;
-    img.src = dataUrl;
+  // Extract ImageData on main thread (needs canvas/DOM)
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(img, 0, 0);
+  const imageData = ctx.getImageData(0, 0, img.naturalWidth, img.naturalHeight);
+
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(
+      new URL('../workers/upscale.worker.ts', import.meta.url),
+      { type: 'module' },
+    );
+
+    worker.onmessage = async (e) => {
+      worker.terminate();
+      if (!e.data.success) {
+        reject(new Error(e.data.error));
+        return;
+      }
+      const out = await loadImage(e.data.dataUrl);
+      resolve({ dataUrl: e.data.dataUrl, width: out.naturalWidth, height: out.naturalHeight });
+    };
+
+    worker.onerror = (err) => {
+      worker.terminate();
+      reject(err);
+    };
+
+    // Transfer imageData buffer to worker (zero-copy)
+    worker.postMessage(
+      { imageData: imageData.data, width: img.naturalWidth, height: img.naturalHeight },
+      [imageData.data.buffer],
+    );
   });
-
-  const result = await upscaler.upscale(img, { output: 'base64', patchSize: 32, padding: 2 });
-  const newDataUrl = result.startsWith('data:') ? result : `data:image/png;base64,${result}`;
-
-  const out = new Image();
-  await new Promise<void>((resolve) => { out.onload = () => resolve(); out.src = newDataUrl; });
-
-  return { dataUrl: newDataUrl, width: out.naturalWidth, height: out.naturalHeight };
 }
