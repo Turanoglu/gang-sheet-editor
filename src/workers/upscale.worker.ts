@@ -16,24 +16,40 @@ async function getUpscaler() {
 
 self.onmessage = async (e: MessageEvent) => {
   const { imageData, width, height } = e.data as {
-    imageData: Uint8ClampedArray;
+    imageData: Uint8Array;
     width: number;
     height: number;
   };
 
   try {
     const u = await getUpscaler();
-    const tensor = tf.tensor3d(new Uint8Array(imageData.buffer), [height, width, 4]);
-    // Drop alpha channel for model input
-    const rgb = tensor.slice([0, 0, 0], [-1, -1, 3]);
+
+    const tensor = tf.tensor3d(imageData, [height, width, 4]);
+    const rgb = tensor.slice([0, 0, 0], [-1, -1, 3]) as tf.Tensor3D;
     tensor.dispose();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = await u.upscale(rgb as any, { output: 'base64', patchSize: 32, padding: 2 });
+    const resultTensor = await u.upscale(rgb as any, {
+      output: 'tensor',
+      patchSize: 32,
+      padding: 2,
+    }) as tf.Tensor3D;
     rgb.dispose();
 
-    const dataUrl = result.startsWith('data:') ? result : `data:image/png;base64,${result}`;
-    self.postMessage({ success: true, dataUrl });
+    // Convert tensor [H, W, 3] → Uint8ClampedArray RGBA
+    const [outH, outW] = resultTensor.shape;
+    const rawData = await resultTensor.data() as Float32Array;
+    resultTensor.dispose();
+
+    const rgba = new Uint8ClampedArray(outW * outH * 4);
+    for (let i = 0; i < outW * outH; i++) {
+      rgba[i * 4 + 0] = Math.round(rawData[i * 3 + 0] * 255);
+      rgba[i * 4 + 1] = Math.round(rawData[i * 3 + 1] * 255);
+      rgba[i * 4 + 2] = Math.round(rawData[i * 3 + 2] * 255);
+      rgba[i * 4 + 3] = 255;
+    }
+
+    self.postMessage({ success: true, rgba, outW, outH }, { transfer: [rgba.buffer] });
   } catch (err) {
     self.postMessage({ success: false, error: (err as Error).message });
   }

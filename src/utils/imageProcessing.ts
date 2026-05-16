@@ -39,14 +39,19 @@ export async function upscaleImage(dataUrl: string): Promise<{ dataUrl: string; 
       { type: 'module' },
     );
 
-    worker.onmessage = async (e) => {
+    worker.onmessage = (e) => {
       worker.terminate();
       if (!e.data.success) {
         reject(new Error(e.data.error));
         return;
       }
-      const out = await loadImage(e.data.dataUrl);
-      resolve({ dataUrl: e.data.dataUrl, width: out.naturalWidth, height: out.naturalHeight });
+      const { rgba, outW, outH } = e.data as { rgba: Uint8ClampedArray; outW: number; outH: number };
+      const outCanvas = document.createElement('canvas');
+      outCanvas.width = outW;
+      outCanvas.height = outH;
+      const outCtx = outCanvas.getContext('2d')!;
+      outCtx.putImageData(new ImageData(new Uint8ClampedArray(rgba.buffer as ArrayBuffer), outW, outH), 0, 0);
+      resolve({ dataUrl: outCanvas.toDataURL('image/png'), width: outW, height: outH });
     };
 
     worker.onerror = (err) => {
