@@ -1,4 +1,5 @@
 import Konva from 'konva';
+import UTIF from 'utif';
 import type { BoardSize } from '../types';
 import { inchesToPx } from '../types';
 
@@ -203,6 +204,94 @@ export async function exportAsPng(options: ExportOptions): Promise<void> {
 
     stage.batchDraw();
   }
+}
+
+/**
+ * Export the stage as TIFF (print-ready, full DPI)
+ */
+export async function exportAsTiff(options: ExportOptions): Promise<void> {
+  const { stage, boardSize, dpi, displayScale } = options;
+
+  const targetWidth = inchesToPx(boardSize.width, dpi);
+  const targetHeight = inchesToPx(boardSize.height, dpi);
+  const currentBoardDisplayWidth = targetWidth * displayScale;
+  const currentBoardDisplayHeight = targetHeight * displayScale;
+  const pixelRatio = targetWidth / currentBoardDisplayWidth;
+
+  const backgroundLayer = stage.findOne('.backgroundLayer');
+  const bgWas = backgroundLayer?.visible();
+  if (backgroundLayer) backgroundLayer.visible(false);
+  const gridLayer = stage.findOne('.gridLayer');
+  const gridWas = gridLayer?.visible();
+  if (gridLayer) gridLayer.visible(false);
+  const transformer = stage.findOne('.transformer') as Konva.Transformer | null;
+  const trWas = transformer?.visible();
+  if (transformer) transformer.visible(false);
+  stage.batchDraw();
+
+  try {
+    const dataUrl = stage.toDataURL({
+      mimeType: 'image/png',
+      pixelRatio,
+      x: 0,
+      y: 0,
+      width: currentBoardDisplayWidth,
+      height: currentBoardDisplayHeight,
+    });
+
+    // Convert dataUrl → ImageData via canvas
+    const img = new Image();
+    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = dataUrl; });
+    const canvas = document.createElement('canvas');
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+    const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+
+    // Encode TIFF with DPI metadata
+    const tiffBuffer = UTIF.encodeImage(imageData.data, targetWidth, targetHeight);
+
+    // Download
+    const blob = new Blob([tiffBuffer], { type: 'image/tiff' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = `gang-sheet-${boardSize.width}x${boardSize.height}-${Date.now()}.tiff`;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  } finally {
+    if (backgroundLayer && bgWas) backgroundLayer.visible(true);
+    if (gridLayer && gridWas) gridLayer.visible(true);
+    if (transformer && trWas) transformer.visible(true);
+    stage.batchDraw();
+  }
+}
+
+/**
+ * Convert a PNG dataUrl to TIFF and download
+ */
+export async function downloadAsTiff(dataUrl: string, filename: string): Promise<void> {
+  const img = new Image();
+  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = dataUrl; });
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(img, 0, 0);
+  const imageData = ctx.getImageData(0, 0, img.naturalWidth, img.naturalHeight);
+  const tiffBuffer = UTIF.encodeImage(imageData.data, img.naturalWidth, img.naturalHeight);
+  const blob = new Blob([tiffBuffer], { type: 'image/tiff' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.download = filename;
+  link.href = url;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 /**

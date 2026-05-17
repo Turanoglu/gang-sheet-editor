@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { downloadAsTiff } from '../utils/export';
 import { Link, useNavigate } from 'react-router-dom';
 import { useOrderStore } from '../store/orderStore';
 import { WelcomeDashboard } from '../components/Dashboard';
@@ -522,23 +523,23 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
-  // Download design as PNG (uses full export if available, otherwise thumbnail)
-  const handleDownloadDesign = (design: GangSheetDesign) => {
-    // Prefer full export URL, fallback to thumbnail
+  // Download design as PNG or TIFF
+  const handleDownloadDesign = async (design: GangSheetDesign, format: 'png' | 'tiff' = 'png') => {
     const downloadUrl = design.fullExportUrl || design.thumbnailUrl;
-    
-    if (!downloadUrl) {
-      alert('No image available for download');
-      return;
-    }
+    if (!downloadUrl) { alert('No image available for download'); return; }
 
-    // Create a link and download
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = `${design.name.replace(/\s+/g, '_')}_${design.boardSize.width}x${design.boardSize.height}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const baseName = `${design.name.replace(/\s+/g, '_')}_${design.boardSize.width}x${design.boardSize.height}`;
+
+    if (format === 'tiff') {
+      await downloadAsTiff(downloadUrl, `${baseName}.tiff`);
+    } else {
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `${baseName}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   // Download order images
@@ -1075,7 +1076,8 @@ export const AdminPanel: React.FC = () => {
                           onView={() => setViewDesign(design)}
                           onEdit={() => setEditDesign(design)}
                           onEditInBuilder={() => handleEditDesign(design)}
-                          onDownload={() => handleDownloadDesign(design)}
+                          onDownload={() => handleDownloadDesign(design, 'png')}
+                          onDownloadTiff={() => handleDownloadDesign(design, 'tiff')}
                           onDelete={() => handleDeleteDesign(design)}
                           formatDate={formatDate}
                         />
@@ -1179,9 +1181,10 @@ const DesignRow: React.FC<{
   onEdit: () => void;
   onEditInBuilder: () => void;
   onDownload: () => void;
+  onDownloadTiff: () => void;
   onDelete: () => void;
   formatDate: (date: Date | string) => string;
-}> = ({ design, adminMode, onView, onEdit, onEditInBuilder, onDownload, onDelete, formatDate }) => (
+}> = ({ design, adminMode, onView, onEdit, onEditInBuilder, onDownload, onDownloadTiff, onDelete, formatDate }) => (
   <tr className="hover:bg-gray-50">
     <td className="px-4 py-3 max-w-[260px]">
       <div className="flex items-center gap-2 min-w-0">
@@ -1241,16 +1244,18 @@ const DesignRow: React.FC<{
     <td className="px-4 py-3">
       <div className="flex items-center gap-1">
         {adminMode && (
-          <button
-            onClick={onDownload}
-            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-            title="Download PNG"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={onDownload}
+              className="px-1.5 py-1 text-xs text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors font-medium"
+              title="Download PNG"
+            >PNG</button>
+            <button
+              onClick={onDownloadTiff}
+              className="px-1.5 py-1 text-xs text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors font-medium"
+              title="Download TIFF (print-ready)"
+            >TIFF</button>
+          </div>
         )}
         <button
           onClick={onView} 
