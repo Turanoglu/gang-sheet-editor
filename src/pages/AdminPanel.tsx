@@ -412,28 +412,43 @@ export const AdminPanel: React.FC = () => {
     if (!adminKeyInput.trim()) return;
     setAdminLoading(true);
     setAdminLoginError('');
-    try {
-      const [fetchedOrders, fetchedDesigns] = await Promise.all([
-        getAdminOrdersFromCloud(adminKeyInput),
-        getAdminDesignsFromCloud(adminKeyInput),
-      ]);
-      localStorage.setItem('gang-sheet-admin-key', adminKeyInput);
-      setAdminOrders(fetchedOrders);
-      setAdminDesigns(fetchedDesigns);
-      setAdminMode(true);
-      setShowAdminLogin(false);
-      setAdminKeyInput('');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg === 'Unauthorized') {
-        setAdminLoginError('Geçersiz admin şifresi. Tekrar deneyin.');
-      } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('fetch')) {
-        setAdminLoginError('Backend\'e bağlanılamıyor. Render.com çalışıyor mu? (Uyku modundan uyanması 30sn sürebilir, tekrar dene)');
-      } else {
-        setAdminLoginError(`Hata: ${msg}`);
+
+    const MAX_RETRIES = 4;
+    const RETRY_DELAY = 8000;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const [fetchedOrders, fetchedDesigns] = await Promise.all([
+          getAdminOrdersFromCloud(adminKeyInput),
+          getAdminDesignsFromCloud(adminKeyInput),
+        ]);
+        localStorage.setItem('gang-sheet-admin-key', adminKeyInput);
+        setAdminOrders(fetchedOrders);
+        setAdminDesigns(fetchedDesigns);
+        setAdminMode(true);
+        setShowAdminLogin(false);
+        setAdminKeyInput('');
+        setAdminLoading(false);
+        return;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const isNetwork = msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.toLowerCase().includes('fetch');
+
+        if (!isNetwork || attempt === MAX_RETRIES) {
+          if (msg === 'Unauthorized') {
+            setAdminLoginError('Geçersiz admin şifresi. Tekrar deneyin.');
+          } else if (isNetwork) {
+            setAdminLoginError('Backend\'e ulaşılamıyor. Render.com dashboard\'dan manuel olarak uyandır ve tekrar dene.');
+          } else {
+            setAdminLoginError(`Hata: ${msg}`);
+          }
+          setAdminLoading(false);
+          return;
+        }
+
+        setAdminLoginError(`Backend uyanıyor, bekleniyor... (${attempt}/${MAX_RETRIES - 1})`);
+        await new Promise(res => setTimeout(res, RETRY_DELAY));
       }
-    } finally {
-      setAdminLoading(false);
     }
   };
 
