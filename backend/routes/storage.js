@@ -82,7 +82,9 @@ router.post('/designs', async (req, res) => {
     }
 
     const key = `users/${customerId}/designs/${design.id}.json`;
-    const designToSave = shopDomain ? { ...design, shopDomain } : design;
+    // Strip heavy base64 fields — they are stored separately in R2 exports
+    const { canvasData, assetsData, fullExportUrl, ...lightDesign } = design;
+    const designToSave = shopDomain ? { ...lightDesign, shopDomain } : lightDesign;
 
     await s3Client.send(new PutObjectCommand({
       Bucket: BUCKET_NAME,
@@ -557,6 +559,48 @@ router.delete('/admin/designs/:customerId/:designId', requireAdminKey, async (re
   } catch (error) {
     console.error('Error deleting design (admin):', error);
     res.status(500).json({ error: 'Failed to delete design', message: error.message });
+  }
+});
+
+// Admin: cleanup heavy fields from all existing design files in R2
+router.post('/admin/cleanup-designs', requireAdminKey, async (req, res) => {
+  try {
+    const listResponse = await s3Client.send(new ListObjectsV2Command({
+      Bucket: BUCKET_NAME,
+      Prefix: 'users/',
+      MaxKeys: 2000,
+    }));
+
+    const designKeys = (listResponse.Contents || [])
+      .filter(obj => obj.Key.includes('/designs/') && obj.Key.endsWith('.json'));
+
+    let cleaned = 0;
+    let skipped = 0;
+    for (const obj of designKeys) {
+      try {
+        const getResponse = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: obj.Key }));
+        const body = await streamToString(getResponse.Body);
+        const parsed = JSON.parse(body);
+        if (!parsed.canvasData && !parsed.assetsData && !parsed.fullExportUrl) {
+          skipped++;
+          continue;
+        }
+        const { canvasData, assetsData, fullExportUrl, ...light } = parsed;
+        await s3Client.send(new PutObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: obj.Key,
+          Body: JSON.stringify(light),
+          ContentType: 'application/json',
+        }));
+        cleaned++;
+      } catch (e) {
+        console.error('Cleanup error for', obj.Key, e.message);
+      }
+    }
+
+    res.json({ success: true, cleaned, skipped, total: designKeys.length });
+  } catch (error) {
+    res.status(500).json({ error: 'Cleanup failed', message: error.message });
   }
 });
 
