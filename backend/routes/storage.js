@@ -415,6 +415,12 @@ router.post('/upload-image', async (req, res) => {
 
 // ==================== ADMIN ENDPOINTS ====================
 
+// Strip heavy fields not needed by admin UI
+const stripHeavyFields = (obj) => {
+  const { canvasData, assetsData, fullExportUrl, ...light } = obj;
+  return light;
+};
+
 // Get ALL orders from ALL customers (admin only, scoped to shopDomain)
 router.get('/admin/orders', requireAdminKey, async (req, res) => {
   try {
@@ -422,6 +428,7 @@ router.get('/admin/orders', requireAdminKey, async (req, res) => {
     const listResponse = await s3Client.send(new ListObjectsV2Command({
       Bucket: BUCKET_NAME,
       Prefix: 'users/',
+      MaxKeys: 2000,
     }));
 
     const orderKeys = (listResponse.Contents || [])
@@ -435,7 +442,7 @@ router.get('/admin/orders', requireAdminKey, async (req, res) => {
           Key: obj.Key,
         }));
         const body = await streamToString(getResponse.Body);
-        const parsed = JSON.parse(body);
+        const parsed = stripHeavyFields(JSON.parse(body));
         const parts = obj.Key.split('/');
         parsed.customerId = parts[1];
         if (itemBelongsToShop(parsed, shopDomain)) orders.push(parsed);
@@ -459,6 +466,7 @@ router.get('/admin/designs', requireAdminKey, async (req, res) => {
     const listResponse = await s3Client.send(new ListObjectsV2Command({
       Bucket: BUCKET_NAME,
       Prefix: 'users/',
+      MaxKeys: 2000,
     }));
 
     const designKeys = (listResponse.Contents || [])
@@ -472,7 +480,7 @@ router.get('/admin/designs', requireAdminKey, async (req, res) => {
           Key: obj.Key,
         }));
         const body = await streamToString(getResponse.Body);
-        const parsed = JSON.parse(body);
+        const parsed = stripHeavyFields(JSON.parse(body));
         const parts = obj.Key.split('/');
         parsed.customerId = parts[1];
         // Refresh thumbnail presigned URL
