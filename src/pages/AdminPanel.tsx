@@ -423,8 +423,15 @@ export const AdminPanel: React.FC = () => {
       setAdminMode(true);
       setShowAdminLogin(false);
       setAdminKeyInput('');
-    } catch {
-      setAdminLoginError('Geçersiz admin şifresi. Tekrar deneyin.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === 'Unauthorized') {
+        setAdminLoginError('Geçersiz admin şifresi. Tekrar deneyin.');
+      } else if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('fetch')) {
+        setAdminLoginError('Backend\'e bağlanılamıyor. Render.com çalışıyor mu? (Uyku modundan uyanması 30sn sürebilir, tekrar dene)');
+      } else {
+        setAdminLoginError(`Hata: ${msg}`);
+      }
     } finally {
       setAdminLoading(false);
     }
