@@ -166,11 +166,19 @@ export const useOrderStore = create<ExtendedOrderStore>()(
             lastCloudSync: new Date(),
           });
         } catch (error) {
-          console.error('Failed to load from cloud:', error);
-          set({
-            isCloudSyncing: false,
-            cloudSyncError: error instanceof Error ? error.message : 'Cloud sync failed',
-          });
+          const msg = error instanceof Error ? error.message : 'Cloud sync failed';
+          const isNetworkError = msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('fetch');
+          if (isNetworkError) {
+            // Backend is likely sleeping (Render free tier) — don't show error, retry silently
+            console.warn('Cloud sync: backend unreachable, will retry in 15s');
+            set({ isCloudSyncing: false });
+            setTimeout(() => {
+              useOrderStore.getState().loadFromCloud();
+            }, 15000);
+          } else {
+            console.error('Failed to load from cloud:', error);
+            set({ isCloudSyncing: false, cloudSyncError: msg });
+          }
         }
       },
 
