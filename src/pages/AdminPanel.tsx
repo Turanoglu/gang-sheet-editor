@@ -459,6 +459,22 @@ export const AdminPanel: React.FC = () => {
     setAdminDesigns([]);
   };
 
+  const handleCleanupDesigns = async () => {
+    const key = localStorage.getItem('gang-sheet-admin-key');
+    if (!key) return;
+    if (!confirm('R2\'deki eski design dosyalarındaki büyük veriyi temizle? (Bir kez yapılması yeterli)')) return;
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://gang-sheet-backend.onrender.com'}/api/storage/admin/cleanup-designs`, {
+        method: 'POST',
+        headers: { 'X-Admin-Key': key },
+      });
+      const data = await res.json();
+      alert(`Temizlendi: ${data.cleaned} dosya, atlandı: ${data.skipped} (zaten temiz)`);
+    } catch (e) {
+      alert('Hata: ' + e);
+    }
+  };
+
   // Modal states
   const [viewDesign, setViewDesign] = useState<GangSheetDesign | null>(null);
   const [viewOrder, setViewOrder] = useState<Order | null>(null);
@@ -883,6 +899,17 @@ export const AdminPanel: React.FC = () => {
                   <span className="w-2 h-2 rounded-full bg-purple-500 flex-shrink-0" />
                   <span className="text-xs font-medium text-purple-700">Admin Modu</span>
                 </div>
+                <button
+                  onClick={handleCleanupDesigns}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs
+                             text-orange-600 hover:bg-orange-50 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  R2 Cleanup (1x)
+                </button>
                 <button
                   onClick={handleAdminLogout}
                   className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs
