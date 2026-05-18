@@ -564,51 +564,29 @@ export const AdminPanel: React.FC = () => {
   // Download design as PNG or TIFF
   const handleDownloadDesign = async (design: GangSheetDesign, format: 'png' | 'tiff' = 'png') => {
     const adminKey = localStorage.getItem('gang-sheet-admin-key');
-    const r2Key = design.id && design.customerId
-      ? `exports/${design.customerId}/${design.id}/full-export.png`
-      : null;
-    const fallbackUrl = design.fullExportUrl || design.thumbnailUrl;
-
-    if (!r2Key && !fallbackUrl) { alert('No image available for download'); return; }
+    if (!design.id || !design.customerId) { alert('No image available for download'); return; }
 
     const baseName = `${design.name.replace(/\s+/g, '_')}_${design.boardSize.width}x${design.boardSize.height}`;
     const apiBase = import.meta.env.VITE_BACKEND_URL || 'https://gang-sheet-backend.onrender.com';
+    const proxyUrl = `${apiBase}/api/storage/proxy-image?customerId=${encodeURIComponent(design.customerId)}&designId=${encodeURIComponent(design.id)}`;
 
-    // Use proxy endpoint to avoid CORS issues with R2 presigned URLs
-    const proxyUrl = r2Key && adminKey
-      ? `${apiBase}/api/storage/proxy-image?key=${encodeURIComponent(r2Key)}`
-      : fallbackUrl!;
+    const res = await fetch(proxyUrl, { headers: { 'X-Admin-Key': adminKey! } });
+    if (!res.ok) { alert(`Görsel bulunamadı (${res.status})`); return; }
 
-    const headers = r2Key && adminKey ? { 'X-Admin-Key': adminKey } : undefined;
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
 
     if (format === 'tiff') {
-      try {
-        const blob = await fetch(proxyUrl, { headers }).then(r => r.blob());
-        await downloadAsTiff(URL.createObjectURL(blob), `${baseName}.tiff`);
-      } catch {
-        // fallback to direct presigned URL (may fail on CORS for getImageData)
-        await downloadAsTiff(fallbackUrl!, `${baseName}.tiff`);
-      }
+      await downloadAsTiff(blobUrl, `${baseName}.tiff`);
     } else {
-      try {
-        const blob = await fetch(proxyUrl, { headers }).then(r => r.blob());
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `${baseName}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      } catch {
-        const link = document.createElement('a');
-        link.href = fallbackUrl!;
-        link.download = `${baseName}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = `${baseName}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
+    URL.revokeObjectURL(blobUrl);
   };
 
   // Download order images

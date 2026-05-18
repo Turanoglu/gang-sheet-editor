@@ -353,17 +353,31 @@ router.post('/upload-url', async (req, res) => {
 // Proxy an R2 object to frontend (avoids CORS issues with presigned URLs)
 router.get('/proxy-image', requireAdminKey, async (req, res) => {
   try {
-    const { key } = req.query;
-    if (!key) return res.status(400).json({ error: 'key is required' });
+    const { customerId, designId } = req.query;
+    if (!customerId || !designId) return res.status(400).json({ error: 'customerId and designId are required' });
 
-    const getResponse = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key }));
-    const contentType = getResponse.ContentType || 'image/png';
-    res.setHeader('Content-Type', contentType);
-    res.setHeader('Cache-Control', 'private, max-age=3600');
-    getResponse.Body.pipe(res);
+    // Try full-export first, fall back to thumbnail
+    const keys = [
+      `exports/${customerId}/${designId}/full-export.png`,
+      `exports/${customerId}/${designId}/thumbnail.png`,
+    ];
+
+    for (const key of keys) {
+      try {
+        const getResponse = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key }));
+        res.setHeader('Content-Type', getResponse.ContentType || 'image/png');
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+        getResponse.Body.pipe(res);
+        return;
+      } catch (e) {
+        if (e.name !== 'NoSuchKey') throw e;
+      }
+    }
+
+    res.status(404).json({ error: 'Image not found in R2' });
   } catch (error) {
     console.error('Error proxying image:', error);
-    res.status(500).json({ error: 'Failed to proxy image' });
+    res.status(500).json({ error: 'Failed to proxy image', message: error.message });
   }
 });
 
