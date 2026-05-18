@@ -563,20 +563,50 @@ export const AdminPanel: React.FC = () => {
 
   // Download design as PNG or TIFF
   const handleDownloadDesign = async (design: GangSheetDesign, format: 'png' | 'tiff' = 'png') => {
-    const downloadUrl = design.fullExportUrl || design.thumbnailUrl;
-    if (!downloadUrl) { alert('No image available for download'); return; }
+    const adminKey = localStorage.getItem('gang-sheet-admin-key');
+    const r2Key = design.fullExportKey || design.thumbnailKey ||
+      (design.id ? `exports/${design.customerId}/${design.id}/full-export.png` : null);
+    const fallbackUrl = design.fullExportUrl || design.thumbnailUrl;
+
+    if (!r2Key && !fallbackUrl) { alert('No image available for download'); return; }
 
     const baseName = `${design.name.replace(/\s+/g, '_')}_${design.boardSize.width}x${design.boardSize.height}`;
+    const apiBase = import.meta.env.VITE_BACKEND_URL || 'https://gang-sheet-backend.onrender.com';
+
+    // Use proxy endpoint to avoid CORS issues with R2 presigned URLs
+    const proxyUrl = r2Key && adminKey
+      ? `${apiBase}/api/storage/proxy-image?key=${encodeURIComponent(r2Key)}`
+      : fallbackUrl!;
+
+    const headers = r2Key && adminKey ? { 'X-Admin-Key': adminKey } : undefined;
 
     if (format === 'tiff') {
-      await downloadAsTiff(downloadUrl, `${baseName}.tiff`);
+      try {
+        const blob = await fetch(proxyUrl, { headers }).then(r => r.blob());
+        await downloadAsTiff(URL.createObjectURL(blob), `${baseName}.tiff`);
+      } catch {
+        // fallback to direct presigned URL (may fail on CORS for getImageData)
+        await downloadAsTiff(fallbackUrl!, `${baseName}.tiff`);
+      }
     } else {
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = `${baseName}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        const blob = await fetch(proxyUrl, { headers }).then(r => r.blob());
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${baseName}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch {
+        const link = document.createElement('a');
+        link.href = fallbackUrl!;
+        link.download = `${baseName}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
     }
   };
 

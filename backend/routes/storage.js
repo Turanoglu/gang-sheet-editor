@@ -350,6 +350,23 @@ router.post('/upload-url', async (req, res) => {
   }
 });
 
+// Proxy an R2 object to frontend (avoids CORS issues with presigned URLs)
+router.get('/proxy-image', requireAdminKey, async (req, res) => {
+  try {
+    const { key } = req.query;
+    if (!key) return res.status(400).json({ error: 'key is required' });
+
+    const getResponse = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key }));
+    const contentType = getResponse.ContentType || 'image/png';
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    getResponse.Body.pipe(res);
+  } catch (error) {
+    console.error('Error proxying image:', error);
+    res.status(500).json({ error: 'Failed to proxy image' });
+  }
+});
+
 // Get presigned URL for downloading/viewing an image
 router.get('/download-url', async (req, res) => {
   try {
