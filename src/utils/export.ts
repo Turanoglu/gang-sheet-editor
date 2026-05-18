@@ -274,8 +274,12 @@ export async function exportAsTiff(options: ExportOptions): Promise<void> {
  * Convert a PNG dataUrl to TIFF and download
  */
 export async function downloadAsTiff(dataUrl: string, filename: string): Promise<void> {
+  // Fetch as blob first to avoid tainted canvas CORS issues with presigned R2 URLs
+  const fetchedBlob = await fetch(dataUrl).then(r => r.blob());
+  const blobUrl = URL.createObjectURL(fetchedBlob);
   const img = new Image();
-  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = dataUrl; });
+  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = blobUrl; });
+  URL.revokeObjectURL(blobUrl);
   const canvas = document.createElement('canvas');
   canvas.width = img.naturalWidth;
   canvas.height = img.naturalHeight;
