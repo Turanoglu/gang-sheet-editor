@@ -564,8 +564,9 @@ export const AdminPanel: React.FC = () => {
   // Download design as PNG or TIFF
   const handleDownloadDesign = async (design: GangSheetDesign, format: 'png' | 'tiff' = 'png') => {
     const adminKey = localStorage.getItem('gang-sheet-admin-key');
-    const r2Key = design.fullExportKey || design.thumbnailKey ||
-      (design.id ? `exports/${design.customerId}/${design.id}/full-export.png` : null);
+    const r2Key = design.id && design.customerId
+      ? `exports/${design.customerId}/${design.id}/full-export.png`
+      : null;
     const fallbackUrl = design.fullExportUrl || design.thumbnailUrl;
 
     if (!r2Key && !fallbackUrl) { alert('No image available for download'); return; }
