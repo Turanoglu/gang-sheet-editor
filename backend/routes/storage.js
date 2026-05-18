@@ -205,7 +205,7 @@ router.post('/orders', async (req, res) => {
     }
 
     const key = `users/${customerId}/orders/${order.id}.json`;
-    const { canvasData, assetsData, fullExportUrl, thumbnailUrl, items, ...lightOrder } = order;
+    const { canvasData, assetsData, items, ...lightOrder } = order;
     const orderToSave = shopDomain ? { ...lightOrder, shopDomain } : lightOrder;
 
     await s3Client.send(new PutObjectCommand({
@@ -418,9 +418,9 @@ router.post('/upload-image', async (req, res) => {
 
 // ==================== ADMIN ENDPOINTS ====================
 
-// Strip heavy fields not needed by admin UI
+// Strip heavy fields not needed by admin UI (keep thumbnailUrl/fullExportUrl as they are presigned URLs, not base64)
 const stripHeavyFields = (obj) => {
-  const { canvasData, assetsData, fullExportUrl, thumbnailUrl, items, ...light } = obj;
+  const { canvasData, assetsData, items, ...light } = obj;
   return light;
 };
 
