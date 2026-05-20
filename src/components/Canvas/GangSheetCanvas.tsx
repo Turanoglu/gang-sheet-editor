@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useMemo } from 'react';
 import { Stage, Layer, Rect, Line, Image, Transformer } from 'react-konva';
 import Konva from 'konva';
 import { useEditorStore } from '../../store/editorStore';
@@ -288,27 +288,6 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
     [displayScale, updateItem]
   );
 
-  // Create checkered pattern image for background (indicates transparency/empty areas)
-  // Use state so Konva re-renders once the image has loaded (avoids black flash on first paint)
-  const [checkerPattern, setCheckerPattern] = useState<HTMLImageElement | null>(null);
-  useEffect(() => {
-    const size = 16;
-    const patternCanvas = document.createElement('canvas');
-    patternCanvas.width = size;
-    patternCanvas.height = size;
-    const ctx = patternCanvas.getContext('2d');
-    if (ctx) {
-      ctx.fillStyle = '#D0D0D0';
-      ctx.fillRect(0, 0, size / 2, size / 2);
-      ctx.fillRect(size / 2, size / 2, size / 2, size / 2);
-      ctx.fillStyle = '#EBEBEB';
-      ctx.fillRect(size / 2, 0, size / 2, size / 2);
-      ctx.fillRect(0, size / 2, size / 2, size / 2);
-    }
-    const img = new window.Image();
-    img.onload = () => setCheckerPattern(img);
-    img.src = patternCanvas.toDataURL();
-  }, []);
 
   // Sort items by zIndex for rendering order
   const sortedItems = useMemo(() => {
@@ -326,7 +305,7 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      {/* Background Layer (checkered pattern for editor visibility; hidden on export) */}
+      {/* Background Layer — dark grey to simulate DTF fabric */}
       <Layer name="backgroundLayer">
         <Rect
           name="background"
@@ -334,8 +313,7 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
           y={0}
           width={displayWidth}
           height={displayHeight}
-          fillPatternImage={checkerPattern ?? undefined}
-          fillPatternRepeat="repeat"
+          fill="#1a1a2e"
         />
       </Layer>
 
