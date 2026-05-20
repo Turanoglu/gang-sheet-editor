@@ -1,11 +1,14 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const shopifyRoutes = require('./routes/shopify');
 const storageRoutes = require('./routes/storage');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Shopify webhook route needs raw body for HMAC verification — mount BEFORE express.json()
+const shopifyRoutes = require('./routes/shopify');
+app.use('/api/shopify', shopifyRoutes);
 
 // Middleware
 const allowedOrigins = [
@@ -34,7 +37,6 @@ app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // Routes
-app.use('/api/shopify', shopifyRoutes);
 app.use('/api/storage', storageRoutes);
 
 // Health check
