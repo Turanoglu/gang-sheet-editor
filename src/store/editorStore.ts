@@ -433,7 +433,6 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
   // History
   pushToHistory: () => {
     set((state) => {
-      // Remove any future history if we're not at the end
       let newHistory = state.history;
       let newHistoryIndex = state.historyIndex;
 
@@ -441,21 +440,23 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
         newHistory = state.history.slice(0, state.historyIndex + 1);
       }
 
-      // Deep clone current items
-      const snapshot = JSON.parse(JSON.stringify(state.items));
+      // Snapshot items (deep clone — no non-serializable fields)
+      // Snapshot assets in-memory (preserve imageEl references, only clone the map)
+      const snapshot = {
+        items: JSON.parse(JSON.stringify(state.items)) as CanvasItem[],
+        assets: Object.fromEntries(
+          Object.entries(state.assets).map(([id, asset]) => [id, { ...asset }])
+        ) as Record<string, Asset>,
+      };
       newHistory = [...newHistory, snapshot];
 
-      // Limit history size
       if (newHistory.length > MAX_HISTORY_SIZE) {
         newHistory = newHistory.slice(1);
       } else {
         newHistoryIndex++;
       }
 
-      return {
-        history: newHistory,
-        historyIndex: newHistoryIndex,
-      };
+      return { history: newHistory, historyIndex: newHistoryIndex };
     });
   },
 
@@ -467,14 +468,21 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
       let newHistory = state.history;
 
       if (state.historyIndex === state.history.length - 1) {
-        // Save current state before undoing
-        const snapshot = JSON.parse(JSON.stringify(state.items));
+        // Save current state as a redo point before undoing
+        const snapshot = {
+          items: JSON.parse(JSON.stringify(state.items)) as CanvasItem[],
+          assets: Object.fromEntries(
+            Object.entries(state.assets).map(([id, asset]) => [id, { ...asset }])
+          ) as Record<string, Asset>,
+        };
         newHistory = [...state.history, snapshot];
       }
 
+      const target = history[historyIndex];
       return {
         history: newHistory,
-        items: JSON.parse(JSON.stringify(history[historyIndex])),
+        items: JSON.parse(JSON.stringify(target.items)),
+        assets: target.assets,
         historyIndex: state.historyIndex - 1,
         selectedIds: [],
       };
@@ -485,11 +493,15 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     const { historyIndex, history } = get();
     if (historyIndex >= history.length - 2) return;
 
-    set((state) => ({
-      historyIndex: state.historyIndex + 1,
-      items: JSON.parse(JSON.stringify(history[state.historyIndex + 2])),
-      selectedIds: [],
-    }));
+    set((state) => {
+      const target = history[state.historyIndex + 2];
+      return {
+        historyIndex: state.historyIndex + 1,
+        items: JSON.parse(JSON.stringify(target.items)),
+        assets: target.assets,
+        selectedIds: [],
+      };
+    });
   },
 
   // Board dimensions helpers

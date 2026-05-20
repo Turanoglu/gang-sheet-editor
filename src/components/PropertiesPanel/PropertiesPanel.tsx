@@ -33,6 +33,7 @@ export const PropertiesPanel: React.FC<{
     addSheet,
     switchSheet,
     deleteSheet,
+    pushToHistory,
   } = useEditorStore();
 
   // Get selected item info
@@ -44,6 +45,7 @@ export const PropertiesPanel: React.FC<{
 
   const handleRemoveBackground = async () => {
     if (!selectedItem || !selectedAsset) return;
+    pushToHistory();
     setBgRemoving(true);
     try {
       const newDataUrl = await removeBackground(selectedAsset.dataUrl);
@@ -59,6 +61,7 @@ export const PropertiesPanel: React.FC<{
 
   const handleUpscale = async () => {
     if (!selectedItem || !selectedAsset) return;
+    pushToHistory();
     setUpscaling(true);
     try {
       const { dataUrl: newDataUrl, width: newW, height: newH } = await upscaleImage(selectedAsset.dataUrl);

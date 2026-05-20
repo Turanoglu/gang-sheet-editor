@@ -126,8 +126,8 @@ export interface EditorState {
   // Auto fill settings
   autoFillSettings: AutoFillSettings;
 
-  // History for undo/redo
-  history: CanvasItem[][];
+  // History for undo/redo (items + assets so bg-removal and upscale are undoable)
+  history: { items: CanvasItem[]; assets: Record<string, Asset> }[];
   historyIndex: number;
 
   // UI state
