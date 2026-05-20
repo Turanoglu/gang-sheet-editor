@@ -75,11 +75,13 @@ export const CartDrawer: React.FC = () => {
 
         setCheckoutStatus('Redirecting to checkout...');
 
+        console.log('[GS-CART] Sending gang-sheet-checkout-v2 to parent', lineItems);
         // Send message to parent (inkdyno.com Liquid template)
         window.parent.postMessage(
           { type: 'gang-sheet-checkout-v2', items: lineItems },
           '*'
         );
+        console.log('[GS-CART] postMessage sent');
 
       } else {
         // ── Standalone / fallback ──────────────────────────────────────
