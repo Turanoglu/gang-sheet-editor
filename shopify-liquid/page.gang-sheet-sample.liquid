@@ -110,61 +110,44 @@
   </script>
 
   <!-- Gang Sheet Checkout: editor'dan gelen postMessage'ı yakala, Shopify cart'a ekle -->
-  <!-- NOTE: Uses XMLHttpRequest instead of fetch to bypass third-party fetch interceptors (e.g. interceptor.js) -->
+  <!-- NOTE: Uses GET URL navigation — bypasses ALL JS interceptors (Kommo CRM, etc.) -->
   <script>
-    function xhrRequest(method, url, body) {
-      return new Promise(function(resolve, reject) {
-        var xhr = new XMLHttpRequest();
-        xhr.open(method, url, true);
-        if (body) xhr.setRequestHeader('Content-Type', 'application/json');
-        xhr.onload = function() {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve({ ok: true, status: xhr.status, responseText: xhr.responseText });
-          } else {
-            try {
-              var data = JSON.parse(xhr.responseText);
-              reject(new Error(data.description || data.message || 'HTTP ' + xhr.status));
-            } catch(e) {
-              reject(new Error('HTTP ' + xhr.status));
-            }
-          }
-        };
-        xhr.onerror = function() { reject(new Error('Network error calling ' + url)); };
-        xhr.send(body ? JSON.stringify(body) : null);
-      });
-    }
-
     window.addEventListener('message', function(event) {
-      // Sadece editor'dan gelen mesajları kabul et
       if (event.origin !== 'https://gang-sheet-editor.vercel.app') return;
       if (!event.data || event.data.type !== 'gang-sheet-checkout') return;
 
       var items = event.data.items;
       if (!items || items.length === 0) return;
 
-      (async function() {
-        try {
-          // 1. Mevcut cart'ı temizle
-          await xhrRequest('POST', '/cart/clear.js', null);
+      try {
+        // For multiple items: chain /cart/add GET requests.
+        // Last item return_to=/checkout, earlier items return_to=/cart/add?...next item
+        // Build URLs from last to first.
+        var finalUrl = '/checkout';
 
-          // 2. Her gang sheet item'ı Shopify cart'a ekle
-          for (var i = 0; i < items.length; i++) {
-            var item = items[i];
-            await xhrRequest('POST', '/cart/add.js', {
-              id: item.variantId,
-              quantity: item.quantity,
-              properties: item.properties
-            });
-          }
+        for (var i = items.length - 1; i >= 0; i--) {
+          var item = items[i];
+          var params = new URLSearchParams();
+          params.set('id', String(item.variantId));
+          params.set('quantity', String(item.quantity || 1));
 
-          // 3. Shopify checkout'a yönlendir
-          window.location.href = '/checkout';
+          var props = item.properties || {};
+          Object.keys(props).forEach(function(key) {
+            params.set('properties[' + key + ']', String(props[key]));
+          });
 
-        } catch (e) {
-          console.error('Gang Sheet checkout error:', e);
-          alert('Checkout failed: ' + e.message + '\n\nPlease try again or contact support.');
+          params.set('return_to', finalUrl);
+          finalUrl = '/cart/add?' + params.toString();
         }
-      })();
+
+        // Full page navigation — no AJAX, no interceptors, browser handles cookies natively
+        console.log('[GS] Navigating to:', finalUrl);
+        window.location.href = finalUrl;
+
+      } catch (e) {
+        console.error('Gang Sheet checkout error:', e);
+        alert('Checkout failed: ' + e.message + '\n\nPlease try again or contact support.');
+      }
     });
   </script>
 
