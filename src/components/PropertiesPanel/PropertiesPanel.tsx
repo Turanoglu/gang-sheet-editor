@@ -61,6 +61,22 @@ export const PropertiesPanel: React.FC<{
 
   const handleUpscale = async () => {
     if (!selectedItem || !selectedAsset) return;
+
+    // Check if 2x upscale would push the item outside board boundaries
+    const boardPxWidth = inchesToPx(boardSize.width, dpi);
+    const boardPxHeight = inchesToPx(boardSize.height, dpi);
+    const upscaledW = selectedItem.width * 2;
+    const upscaledH = selectedItem.height * 2;
+    if (selectedItem.x + upscaledW > boardPxWidth || selectedItem.y + upscaledH > boardPxHeight) {
+      alert(
+        `Upscale would make this image exceed the board boundaries.\n\n` +
+        `Current size: ${(selectedItem.width / dpi).toFixed(2)}" × ${(selectedItem.height / dpi).toFixed(2)}"\n` +
+        `After upscale: ${(upscaledW / dpi).toFixed(2)}" × ${(upscaledH / dpi).toFixed(2)}"\n\n` +
+        `Move the image closer to the top-left or shrink it first.`
+      );
+      return;
+    }
+
     pushToHistory();
     setUpscaling(true);
     try {
