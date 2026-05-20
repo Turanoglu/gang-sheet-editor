@@ -51,7 +51,7 @@ export const PropertiesPanel: React.FC<{
       await new Promise<void>((resolve) => { img.onload = () => resolve(); img.src = newDataUrl; });
       updateAsset(selectedAsset.id, { dataUrl: newDataUrl, imageEl: img });
     } catch (e) {
-      alert('Arkaplan kaldırma başarısız: ' + (e as Error).message);
+      alert('Background removal failed: ' + (e as Error).message);
     } finally {
       setBgRemoving(false);
     }
@@ -69,7 +69,7 @@ export const PropertiesPanel: React.FC<{
       updateAsset(selectedAsset.id, { dataUrl: newDataUrl, imageEl: img, originalWidth: newW, originalHeight: newH });
       updateItem(selectedItem.id, { width: selectedItem.width * scaleX, height: selectedItem.height * scaleY });
     } catch (e) {
-      alert('Upscale başarısız: ' + (e as Error).message);
+      alert('Upscale failed: ' + (e as Error).message);
     } finally {
       setUpscaling(false);
     }
@@ -291,7 +291,7 @@ export const PropertiesPanel: React.FC<{
                         d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
                 </svg>
               )}
-              {bgRemoving ? 'Arkaplan kaldırılıyor...' : 'Arkaplanı Kaldır'}
+              {bgRemoving ? 'Removing background...' : 'Remove Background'}
             </button>
 
             <button
@@ -312,7 +312,7 @@ export const PropertiesPanel: React.FC<{
                         d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                 </svg>
               )}
-              {upscaling ? 'Upscale yapılıyor...' : 'Upscale 2x'}
+              {upscaling ? 'Upscaling...' : 'Upscale 2x'}
             </button>
           </div>
         </div>
