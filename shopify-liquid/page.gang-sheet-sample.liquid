@@ -114,7 +114,7 @@
   <script>
     window.addEventListener('message', function(event) {
       if (event.origin !== 'https://gang-sheet-editor.vercel.app') return;
-      if (!event.data || event.data.type !== 'gang-sheet-checkout') return;
+      if (!event.data || event.data.type !== 'gang-sheet-checkout-v2') return;
 
       var items = event.data.items;
       if (!items || items.length === 0) return;

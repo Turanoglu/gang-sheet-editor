@@ -77,7 +77,7 @@ export const CartDrawer: React.FC = () => {
 
         // Send message to parent (inkdyno.com Liquid template)
         window.parent.postMessage(
-          { type: 'gang-sheet-checkout', items: lineItems },
+          { type: 'gang-sheet-checkout-v2', items: lineItems },
           '*'
         );
 
