@@ -22,16 +22,19 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
+const MAX_SIDE = 4000;
+
 export async function upscaleImage(dataUrl: string): Promise<{ dataUrl: string; width: number; height: number }> {
   const img = await loadImage(dataUrl);
+  const { naturalWidth: w, naturalHeight: h } = img;
 
-  // Extract ImageData on main thread (needs canvas/DOM)
-  const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
-  const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(img, 0, 0);
-  const imageData = ctx.getImageData(0, 0, img.naturalWidth, img.naturalHeight);
+  // Warn if already at or above the cap
+  if (w >= MAX_SIDE || h >= MAX_SIDE) {
+    throw new Error(`Image is already ${w}×${h}px — upscaling further would exceed the ${MAX_SIDE}px limit.`);
+  }
+
+  // Create ImageBitmap — transferable and GPU-friendly
+  const bitmap = await createImageBitmap(img);
 
   return new Promise((resolve, reject) => {
     const worker = new Worker(
@@ -39,19 +42,21 @@ export async function upscaleImage(dataUrl: string): Promise<{ dataUrl: string; 
       { type: 'module' },
     );
 
-    worker.onmessage = (e) => {
+    worker.onmessage = async (e) => {
       worker.terminate();
       if (!e.data.success) {
         reject(new Error(e.data.error));
         return;
       }
-      const { rgba, outW, outH } = e.data as { rgba: Uint8ClampedArray; outW: number; outH: number };
-      const outCanvas = document.createElement('canvas');
-      outCanvas.width = outW;
-      outCanvas.height = outH;
-      const outCtx = outCanvas.getContext('2d')!;
-      outCtx.putImageData(new ImageData(new Uint8ClampedArray(rgba.buffer as ArrayBuffer), outW, outH), 0, 0);
-      resolve({ dataUrl: outCanvas.toDataURL('image/png'), width: outW, height: outH });
+      const { blob, outW, outH } = e.data as { blob: Blob; outW: number; outH: number };
+      // Convert blob → dataUrl without loading a full pixel array in JS
+      const dataUrl = await new Promise<string>((res, rej) => {
+        const reader = new FileReader();
+        reader.onload = () => res(reader.result as string);
+        reader.onerror = rej;
+        reader.readAsDataURL(blob);
+      });
+      resolve({ dataUrl, width: outW, height: outH });
     };
 
     worker.onerror = (err) => {
@@ -59,9 +64,7 @@ export async function upscaleImage(dataUrl: string): Promise<{ dataUrl: string; 
       reject(err);
     };
 
-    worker.postMessage(
-      { imageData: imageData.data, width: img.naturalWidth, height: img.naturalHeight, scale: 2 },
-      [imageData.data.buffer],
-    );
+    // Transfer the bitmap to worker — zero-copy, original is neutered
+    worker.postMessage({ bitmap, width: w, height: h, scale: 2 }, [bitmap]);
   });
 }
