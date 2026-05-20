@@ -6,8 +6,8 @@ const SHOPIFY_LOGIN_URL = 'https://www.inkdyno.com/account/login?return_url=%2Fp
 
 function ShopifyAuthGate({ children }: { children: React.ReactNode }) {
   const urlParams = new URLSearchParams(window.location.search);
-  // Must come through Shopify iframe: requires both 'shop' and 'customerId' in URL
-  const isEmbedded = !!urlParams.get('shop') && !!urlParams.get('customerId');
+  // Must come through Shopify iframe: 'shop' param is enough, customerId optional (login may come later)
+  const isEmbedded = !!urlParams.get('shop');
 
   if (!isEmbedded) {
     return (
