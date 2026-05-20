@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useCartStore } from '../../store/cartStore';
 import { useOrderStore } from '../../store/orderStore';
 import { getVariantId, areVariantsConfigured } from '../../config/shopifyVariants';
-import { getCustomerName } from '../../services/storageAPI';
+import { getCustomerName, getCustomerId } from '../../services/storageAPI';
 
 // Detect if the editor is embedded inside an iframe (e.g. inkdyno.com)
 const isEmbedded = (): boolean => {
@@ -21,6 +21,12 @@ export const CartDrawer: React.FC = () => {
 
   const handleCheckout = async () => {
     if (items.length === 0) return;
+
+    // If embedded in Shopify and customer not logged in, request login via parent
+    if (isEmbedded() && areVariantsConfigured() && !getCustomerId()) {
+      window.parent.postMessage({ type: 'gang-sheet-login-required' }, '*');
+      return;
+    }
 
     setIsCheckingOut(true);
     setCheckoutStatus('Preparing order...');

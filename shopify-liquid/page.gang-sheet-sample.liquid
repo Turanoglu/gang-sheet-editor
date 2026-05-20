@@ -1,8 +1,4 @@
 {% layout none %}
-{% unless customer %}
-  {% assign return_url = '/pages/gang-sheet-sample' | url_encode %}
-  <script>window.location.href = '/account/login?return_url={{ return_url }}';</script>
-{% endunless %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -54,9 +50,63 @@
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       Array.from(document.body.children).forEach(function(el) {
-        if (el.id !== 'gang-sheet-wrapper') el.style.display = 'none';
+        if (el.id !== 'gang-sheet-wrapper' && el.id !== 'gs-login-overlay') el.style.display = 'none';
       });
     });
+  </script>
+
+  <!-- Login overlay (hidden by default, shown when editor requests login) -->
+  <div id="gs-login-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:2147483646; align-items:center; justify-content:center;">
+    <div style="background:#fff; border-radius:16px; padding:40px 32px; max-width:380px; width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+      <div style="font-size:48px; margin-bottom:16px;">🔒</div>
+      <h2 style="margin:0 0 8px; font-size:22px; font-weight:700; color:#1a1a1a;">Sign in to continue</h2>
+      <p style="margin:0 0 28px; color:#666; font-size:15px; line-height:1.5;">Please sign in to save your design and add it to your cart.</p>
+      <button id="gs-login-btn" style="display:block; width:100%; padding:14px; background:linear-gradient(135deg,#667eea,#764ba2); color:#fff; border:none; border-radius:10px; font-size:16px; font-weight:600; cursor:pointer; margin-bottom:12px;">
+        Sign In
+      </button>
+      <button id="gs-login-cancel" style="display:block; width:100%; padding:12px; background:transparent; color:#666; border:1px solid #ddd; border-radius:10px; font-size:15px; cursor:pointer;">
+        Cancel
+      </button>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      var overlay = document.getElementById('gs-login-overlay');
+      var loginBtn = document.getElementById('gs-login-btn');
+      var cancelBtn = document.getElementById('gs-login-cancel');
+      var loginPopup = null;
+
+      function showLoginOverlay() {
+        overlay.style.display = 'flex';
+      }
+
+      function hideLoginOverlay() {
+        overlay.style.display = 'none';
+      }
+
+      loginBtn.addEventListener('click', function() {
+        loginPopup = window.open('/account/login', 'shopify-login', 'width=520,height=640,left=' + Math.round((screen.width-520)/2) + ',top=' + Math.round((screen.height-640)/2));
+        // Poll until popup closes, then reload page so iframe gets customer params
+        var poll = setInterval(function() {
+          if (!loginPopup || loginPopup.closed) {
+            clearInterval(poll);
+            loginPopup = null;
+            window.location.reload();
+          }
+        }, 500);
+      });
+
+      cancelBtn.addEventListener('click', hideLoginOverlay);
+
+      // Listen for login request from editor iframe
+      window.addEventListener('message', function(event) {
+        if (event.origin !== 'https://gang-sheet-editor.vercel.app') return;
+        if (event.data && event.data.type === 'gang-sheet-login-required') {
+          showLoginOverlay();
+        }
+      });
+    })();
   </script>
 
   <!-- Gang Sheet Checkout: editor'dan gelen postMessage'ı yakala, Shopify cart'a ekle -->
