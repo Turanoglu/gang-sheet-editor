@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useRef, useEffect, useCallback, useMemo, useState } from 'react';
 import { Stage, Layer, Rect, Line, Image, Transformer } from 'react-konva';
 import Konva from 'konva';
 import { useEditorStore } from '../../store/editorStore';
@@ -289,7 +289,9 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
   );
 
   // Create checkered pattern image for background (indicates transparency/empty areas)
-  const checkerPattern = useMemo(() => {
+  // Use state so Konva re-renders once the image has loaded (avoids black flash on first paint)
+  const [checkerPattern, setCheckerPattern] = useState<HTMLImageElement | null>(null);
+  useEffect(() => {
     const size = 16;
     const patternCanvas = document.createElement('canvas');
     patternCanvas.width = size;
@@ -304,8 +306,8 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
       ctx.fillRect(0, size / 2, size / 2, size / 2);
     }
     const img = new window.Image();
+    img.onload = () => setCheckerPattern(img);
     img.src = patternCanvas.toDataURL();
-    return img;
   }, []);
 
   // Sort items by zIndex for rendering order
@@ -332,7 +334,7 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
           y={0}
           width={displayWidth}
           height={displayHeight}
-          fillPatternImage={checkerPattern}
+          fillPatternImage={checkerPattern ?? undefined}
           fillPatternRepeat="repeat"
         />
       </Layer>
