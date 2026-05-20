@@ -21,6 +21,13 @@ self.onmessage = async (e: MessageEvent) => {
       dstH = Math.round(dstH * ratio);
     }
 
+    // If clamping made output same as input, image is already at max resolution
+    if (dstW === width && dstH === height) {
+      bitmap.close();
+      self.postMessage({ success: false, error: `Image is already at maximum resolution (${width}×${height}px). Upscaling would not improve quality.` });
+      return;
+    }
+
     const canvas = new OffscreenCanvas(dstW, dstH);
     const ctx = canvas.getContext('2d') as OffscreenCanvasRenderingContext2D;
     ctx.imageSmoothingEnabled = true;

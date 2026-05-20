@@ -22,16 +22,9 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-const MAX_SIDE = 4000;
-
 export async function upscaleImage(dataUrl: string): Promise<{ dataUrl: string; width: number; height: number }> {
   const img = await loadImage(dataUrl);
   const { naturalWidth: w, naturalHeight: h } = img;
-
-  // Warn if already at or above the cap
-  if (w >= MAX_SIDE || h >= MAX_SIDE) {
-    throw new Error(`Image is already ${w}×${h}px — upscaling further would exceed the ${MAX_SIDE}px limit.`);
-  }
 
   // Create ImageBitmap — transferable and GPU-friendly
   const bitmap = await createImageBitmap(img);
