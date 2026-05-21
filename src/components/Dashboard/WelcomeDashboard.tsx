@@ -347,7 +347,7 @@ export const WelcomeDashboard: React.FC<WelcomeDashboardProps> = ({ orders: prop
                 <div key={order.id} className="flex items-center justify-between py-2">
                   <div className="flex-1">
                     <p className="font-medium text-gray-800 font-mono">{order.orderNumber}</p>
-                    <p className="text-sm text-gray-500">{order.items.length} item{order.items.length !== 1 ? 's' : ''}</p>
+                    <p className="text-sm text-gray-500">{(order.items?.length ?? 0)} item{(order.items?.length ?? 0) !== 1 ? 's' : ''}</p>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-gray-800">${order.totalAmount.toFixed(2)}</p>

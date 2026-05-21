@@ -199,9 +199,9 @@ const OrderViewModal: React.FC<{
             </div>
 
             {/* Items */}
-            <h4 className="font-semibold text-gray-800 mb-3">Order Items ({order.items.length})</h4>
+            <h4 className="font-semibold text-gray-800 mb-3">Order Items ({order.items?.length ?? 0})</h4>
             <div className="space-y-3">
-              {order.items.map((item) => (
+              {(order.items ?? []).map((item) => (
                 <div key={item.id} className="bg-gray-50 rounded-xl p-4 flex gap-4">
                   {/* Thumbnail */}
                   <div className="w-20 h-20 bg-white rounded-lg border border-gray-200 flex-shrink-0 overflow-hidden">
@@ -592,7 +592,7 @@ export const AdminPanel: React.FC = () => {
   // Download order images
   const handleDownloadOrder = (order: Order) => {
     // Download all design full exports in the order
-    order.items.forEach((item, index) => {
+    (order.items ?? []).forEach((item, index) => {
       // Prefer full export URL, fallback to thumbnail
       const downloadUrl = item.design.fullExportUrl || item.design.thumbnailUrl;
       
