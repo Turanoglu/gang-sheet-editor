@@ -1381,7 +1381,7 @@ const OrderRow: React.FC<{
       </button>
     </td>
     <td className="px-4 py-3 text-gray-700">
-      {order.items[0]?.design.boardSize.label || '-'}
+      {order.items?.[0]?.design?.boardSize?.label || '-'}
     </td>
     <td className="px-4 py-3">
       <select

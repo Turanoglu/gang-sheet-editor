@@ -119,45 +119,34 @@
       var items = event.data.items;
       if (!items || items.length === 0) return;
 
-      // Use Shopify AJAX Cart API (/cart/add.js) — no CSRF token needed,
-      // works from Liquid context, supports line item properties.
-      (async function() {
-        try {
-          var cartItems = items.map(function(item) {
-            return {
-              id: item.variantId,
-              quantity: item.quantity || 1,
-              properties: item.properties || {}
-            };
+      try {
+        // GET navigation to /cart/add — no CSRF, no AJAX, browser handles cookies natively.
+        // For multiple items, chain: last item returns to /checkout,
+        // each earlier item returns to the next /cart/add URL.
+        var finalUrl = '/checkout';
+
+        for (var i = items.length - 1; i >= 0; i--) {
+          var item = items[i];
+          var params = new URLSearchParams();
+          params.set('id', String(item.variantId));
+          params.set('quantity', String(item.quantity || 1));
+
+          var props = item.properties || {};
+          Object.keys(props).forEach(function(key) {
+            params.set('properties[' + key + ']', String(props[key]));
           });
 
-          console.log('[GS] Adding to cart via AJAX:', cartItems);
-
-          var response = await fetch('/cart/add.js', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify({ items: cartItems })
-          });
-
-          if (!response.ok) {
-            var errText = await response.text();
-            var errJson = null;
-            try { errJson = JSON.parse(errText); } catch(e) {}
-            var msg = (errJson && errJson.description) || errText || ('HTTP ' + response.status);
-            throw new Error(msg);
-          }
-
-          console.log('[GS] Cart updated, redirecting to checkout...');
-          window.location.href = '/checkout';
-
-        } catch (e) {
-          console.error('[GS] Checkout error:', e);
-          alert('Checkout failed: ' + e.message + '\n\nPlease try again or contact support.');
+          params.set('return_to', finalUrl);
+          finalUrl = '/cart/add?' + params.toString();
         }
-      })();
+
+        console.log('[GS] Navigating to cart:', finalUrl);
+        window.location.href = finalUrl;
+
+      } catch (e) {
+        console.error('[GS] Checkout error:', e);
+        alert('Checkout failed: ' + e.message + '\n\nPlease try again or contact support.');
+      }
     });
   </script>
 
