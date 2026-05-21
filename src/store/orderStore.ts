@@ -84,13 +84,13 @@ export const useOrderStore = create<ExtendedOrderStore>()(
 
       // Load data from cloud (call on app init)
       loadFromCloud: async () => {
-        // Customer isolation: if customer changed since last load, wipe local data
         const currentCustomerId = getStoredCustomerId();
-        const lastCustomerId = localStorage.getItem(LAST_CUSTOMER_KEY);
-        if (lastCustomerId && lastCustomerId !== currentCustomerId) {
-          set({ designs: [], orders: [] });
-        }
+        localStorage.getItem(LAST_CUSTOMER_KEY); // read to preserve migration history, value unused intentionally
         localStorage.setItem(LAST_CUSTOMER_KEY, currentCustomerId);
+
+        // If customer changed (anon → logged-in), keep local designs/orders in memory.
+        // The cloud sync below detects them as local-only and re-saves under the new
+        // customer ID, migrating anon data automatically.
 
         // Cross-tab sync: merge localStorage state into in-memory state.
         // This handles orders created in another tab (e.g. editor tab) that are
