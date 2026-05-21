@@ -43,7 +43,9 @@ export const CartDrawer: React.FC = () => {
       }
 
       if (isEmbedded() && areVariantsConfigured()) {
-        // ── Shopify Cart API via postMessage ──────────────────────────
+        // ── GET navigation via window.open(_top) ─────────────────────
+        // Works from cross-origin iframes; bypasses all JS interceptors (Kommo CRM etc.)
+        // Does NOT depend on the Shopify liquid — the iframe navigates the top window directly.
         const lineItems = items.map(item => {
           const variantId = getVariantId(
             item.design.boardSize.width,
@@ -66,17 +68,26 @@ export const CartDrawer: React.FC = () => {
           };
         });
 
+        // Build chained /cart/add GET URL (last item → /checkout, each earlier → next add)
+        let finalUrl = '/checkout';
+        for (let i = lineItems.length - 1; i >= 0; i--) {
+          const item = lineItems[i];
+          const params = new URLSearchParams();
+          params.set('id', String(item.variantId));
+          params.set('quantity', String(item.quantity));
+          Object.entries(item.properties).forEach(([k, v]) => {
+            params.set(`properties[${k}]`, v);
+          });
+          params.set('return_to', finalUrl);
+          finalUrl = '/cart/add?' + params.toString();
+        }
+
         setCheckoutStatus('Redirecting to checkout...');
-
-        // Send postMessage BEFORE clearing cart/closing drawer so the message
-        // is dispatched while the component is still mounted.
-        window.parent.postMessage(
-          { type: 'gang-sheet-checkout', items: lineItems },
-          '*'
-        );
-
         clearCart();
         closeCart();
+
+        // Navigate top-level window — allowed from cross-origin iframes
+        window.open(finalUrl, '_top');
 
       } else {
         // ── Standalone / fallback ──────────────────────────────────────
