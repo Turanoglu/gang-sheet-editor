@@ -1,6 +1,32 @@
+import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { EditorPage, AdminPanel } from './pages';
 import './App.css';
+
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: Error | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 32, fontFamily: 'monospace' }}>
+          <h2 style={{ color: 'red' }}>Admin Panel Hatası</h2>
+          <pre style={{ background: '#fee', padding: 16, borderRadius: 8, whiteSpace: 'pre-wrap' }}>
+            {this.state.error.message}{'\n'}{this.state.error.stack}
+          </pre>
+          <button onClick={() => { localStorage.removeItem('gang-sheet-admin-key'); window.location.reload(); }}
+            style={{ marginTop: 16, padding: '8px 16px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+            Admin key temizle ve yenile
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const SHOPIFY_LOGIN_URL = 'https://www.inkdyno.com/account/login?return_url=%2Fpages%2Fgang-sheet-sample';
 
@@ -41,7 +67,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<ShopifyAuthGate><EditorPage /></ShopifyAuthGate>} />
-        <Route path="/admin" element={<AdminPanel />} />
+        <Route path="/admin" element={<ErrorBoundary><AdminPanel /></ErrorBoundary>} />
       </Routes>
     </BrowserRouter>
   );

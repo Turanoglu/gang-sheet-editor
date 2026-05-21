@@ -288,7 +288,13 @@ export const Toolbar: React.FC<ToolbarProps> = ({ isPanMode = false, onTogglePan
             if (name) params.set('customerName', name);
             if (email) params.set('customerEmail', email);
             if (shopDomain) params.set('shopDomain', shopDomain);
-            window.open(`/admin?${params.toString()}`, '_blank');
+            // Use absolute URL so it works from inside Shopify iframe
+            const adminUrl = `${window.location.origin}/admin?${params.toString()}`;
+            if (window.top && window.top !== window) {
+              window.top.open(adminUrl, '_blank');
+            } else {
+              window.open(adminUrl, '_blank');
+            }
           }}
           title="Tasarımlarım ve Siparişlerim"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors bg-gray-100 hover:bg-gray-200 text-gray-700"
