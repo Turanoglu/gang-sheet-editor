@@ -72,6 +72,7 @@ export const CartDrawer: React.FC = () => {
         const shopDomain = getShopDomain() || 'www.inkdyno.com';
         const storeBase = `https://${shopDomain}`;
 
+        // return_to must be relative — Shopify rejects absolute URLs as open-redirect
         let finalUrl = `${storeBase}/checkout`;
         for (let i = lineItems.length - 1; i >= 0; i--) {
           const item = lineItems[i];
@@ -81,7 +82,7 @@ export const CartDrawer: React.FC = () => {
           Object.entries(item.properties).forEach(([k, v]) => {
             params.set(`properties[${k}]`, v);
           });
-          params.set('return_to', `${storeBase}/checkout`);
+          params.set('return_to', '/checkout');
           finalUrl = `${storeBase}/cart/add?` + params.toString();
         }
 
