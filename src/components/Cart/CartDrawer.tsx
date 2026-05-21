@@ -36,7 +36,7 @@ export const CartDrawer: React.FC = () => {
       const customerName = getCustomerName() || 'Customer';
       for (const item of items) {
         if (item.orderId) {
-          await updateOrderStatus(item.orderId, 'Created');
+          updateOrderStatus(item.orderId, 'Created');
         } else {
           createOrder(customerName, [item], 'Created');
         }
@@ -70,15 +70,17 @@ export const CartDrawer: React.FC = () => {
           };
         });
 
-        clearCart();
-        closeCart();
-
         setCheckoutStatus('Redirecting to checkout...');
 
+        // Send postMessage BEFORE clearing cart/closing drawer so the message
+        // is dispatched while the component is still mounted.
         window.parent.postMessage(
           { type: 'gang-sheet-checkout', items: lineItems },
           '*'
         );
+
+        clearCart();
+        closeCart();
 
       } else {
         // ── Standalone / fallback ──────────────────────────────────────

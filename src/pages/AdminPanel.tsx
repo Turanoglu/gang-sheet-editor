@@ -613,10 +613,15 @@ export const AdminPanel: React.FC = () => {
   const handleEditDesign = (design: GangSheetDesign) => {
     setCurrentDesign(design);
     const cid = getCustomerId();
-    const params = new URLSearchParams({ customerId: cid });
+    const shopDomain = getShopDomain();
+    // Derive the 'shop' slug from shopDomain (e.g. "inkdyno.com" → "inkdyno")
+    // Fall back to 'inkdyno' so ShopifyAuthGate doesn't block the editor.
+    const shopSlug = shopDomain
+      ? shopDomain.replace(/^www\./, '').split('.')[0]
+      : 'inkdyno';
+    const params = new URLSearchParams({ customerId: cid, shop: shopSlug });
     const name = getCustomerName();
     const email = getCustomerEmail();
-    const shopDomain = getShopDomain();
     if (name) params.set('customerName', name);
     if (email) params.set('customerEmail', email);
     if (shopDomain) params.set('shopDomain', shopDomain);
