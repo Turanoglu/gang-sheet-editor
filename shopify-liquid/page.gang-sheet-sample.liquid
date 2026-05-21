@@ -5,6 +5,50 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gang Sheet Editor</title>
+
+  <!-- CRITICAL: Register message listeners BEFORE any Shopify app scripts (interceptor.js etc.) patch window.addEventListener -->
+  <script>
+    (function() {
+      // Checkout listener
+      window.addEventListener('message', function(event) {
+        if (event.origin !== 'https://gang-sheet-editor.vercel.app') return;
+        if (!event.data || event.data.type !== 'gang-sheet-checkout-v2') return;
+
+        var items = event.data.items;
+        if (!items || items.length === 0) return;
+
+        try {
+          var finalUrl = '/checkout';
+          for (var i = items.length - 1; i >= 0; i--) {
+            var item = items[i];
+            var params = new URLSearchParams();
+            params.set('id', String(item.variantId));
+            params.set('quantity', String(item.quantity || 1));
+            var props = item.properties || {};
+            Object.keys(props).forEach(function(key) {
+              params.set('properties[' + key + ']', String(props[key]));
+            });
+            params.set('return_to', finalUrl);
+            finalUrl = '/cart/add?' + params.toString();
+          }
+          console.log('[GS] Navigating to:', finalUrl);
+          window.location.href = finalUrl;
+        } catch (e) {
+          console.error('[GS] Checkout error:', e);
+          alert('Checkout failed: ' + e.message + '\n\nPlease try again or contact support.');
+        }
+      });
+
+      // Login request listener
+      window.addEventListener('message', function(event) {
+        if (event.origin !== 'https://gang-sheet-editor.vercel.app') return;
+        if (!event.data || event.data.type !== 'gang-sheet-login-required') return;
+        var overlay = document.getElementById('gs-login-overlay');
+        if (overlay) overlay.style.display = 'flex';
+      });
+    })();
+  </script>
+
   <style>
     html, body {
       margin: 0 !important;
@@ -28,7 +72,7 @@
 
   <iframe
     id="gang-sheet-wrapper"
-    src="https://gang-sheet-editor.vercel.app/?{% if customer %}customerId={{ customer.id }}&customerEmail={{ customer.email | url_encode }}&customerName={{ customer.first_name | append: ' ' | append: customer.last_name | strip | url_encode }}&shopDomain={{ shop.permanent_domain | url_encode }}&{% endif %}shop=inkdyno"
+    src="https://gang-sheet-editor.vercel.app/?{% if customer %}customerId={{ customer.id }}&customerEmail={{ customer.email | url_encode }}&customerName={{ customer.first_name | append: ' ' | append: customer.last_name | strip | url_encode }}&shopDomain={{ shop.permanent_domain | url_encode }}&{% endif %}shop=inkdyno&storeUrl={{ shop.url | url_encode }}"
     allow="clipboard-read; clipboard-write"
   ></iframe>
 
@@ -55,7 +99,7 @@
     });
   </script>
 
-  <!-- Login overlay (hidden by default, shown when editor requests login) -->
+  <!-- Login overlay -->
   <div id="gs-login-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:2147483646; align-items:center; justify-content:center;">
     <div style="background:#fff; border-radius:16px; padding:40px 32px; max-width:380px; width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3);">
       <div style="font-size:48px; margin-bottom:16px;">🔒</div>
@@ -72,22 +116,13 @@
 
   <script>
     (function() {
-      var overlay = document.getElementById('gs-login-overlay');
       var loginBtn = document.getElementById('gs-login-btn');
       var cancelBtn = document.getElementById('gs-login-cancel');
+      var overlay = document.getElementById('gs-login-overlay');
       var loginPopup = null;
-
-      function showLoginOverlay() {
-        overlay.style.display = 'flex';
-      }
-
-      function hideLoginOverlay() {
-        overlay.style.display = 'none';
-      }
 
       loginBtn.addEventListener('click', function() {
         loginPopup = window.open('/account/login', 'shopify-login', 'width=520,height=640,left=' + Math.round((screen.width-520)/2) + ',top=' + Math.round((screen.height-640)/2));
-        // Poll until popup closes, then reload page so iframe gets customer params
         var poll = setInterval(function() {
           if (!loginPopup || loginPopup.closed) {
             clearInterval(poll);
@@ -97,58 +132,10 @@
         }, 500);
       });
 
-      cancelBtn.addEventListener('click', hideLoginOverlay);
-
-      // Listen for login request from editor iframe
-      window.addEventListener('message', function(event) {
-        if (event.origin !== 'https://gang-sheet-editor.vercel.app') return;
-        if (event.data && event.data.type === 'gang-sheet-login-required') {
-          showLoginOverlay();
-        }
+      cancelBtn.addEventListener('click', function() {
+        overlay.style.display = 'none';
       });
     })();
-  </script>
-
-  <!-- Gang Sheet Checkout: editor'dan gelen postMessage'ı yakala, Shopify cart'a ekle -->
-  <!-- NOTE: Uses GET URL navigation — bypasses ALL JS interceptors (Kommo CRM, etc.) -->
-  <script>
-    window.addEventListener('message', function(event) {
-      if (event.origin !== 'https://gang-sheet-editor.vercel.app') return;
-      if (!event.data || event.data.type !== 'gang-sheet-checkout-v2') return;
-
-      var items = event.data.items;
-      if (!items || items.length === 0) return;
-
-      try {
-        // For multiple items: chain /cart/add GET requests.
-        // Last item return_to=/checkout, earlier items return_to=/cart/add?...next item
-        // Build URLs from last to first.
-        var finalUrl = '/checkout';
-
-        for (var i = items.length - 1; i >= 0; i--) {
-          var item = items[i];
-          var params = new URLSearchParams();
-          params.set('id', String(item.variantId));
-          params.set('quantity', String(item.quantity || 1));
-
-          var props = item.properties || {};
-          Object.keys(props).forEach(function(key) {
-            params.set('properties[' + key + ']', String(props[key]));
-          });
-
-          params.set('return_to', finalUrl);
-          finalUrl = '/cart/add?' + params.toString();
-        }
-
-        // Full page navigation — no AJAX, no interceptors, browser handles cookies natively
-        console.log('[GS] Navigating to:', finalUrl);
-        window.location.href = finalUrl;
-
-      } catch (e) {
-        console.error('Gang Sheet checkout error:', e);
-        alert('Checkout failed: ' + e.message + '\n\nPlease try again or contact support.');
-      }
-    });
   </script>
 
 </body>
