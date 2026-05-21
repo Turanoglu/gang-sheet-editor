@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useCartStore } from '../../store/cartStore';
 import { useOrderStore } from '../../store/orderStore';
 import { getVariantId, areVariantsConfigured } from '../../config/shopifyVariants';
-import { getCustomerName, getCustomerId } from '../../services/storageAPI';
+import { getCustomerName, getCustomerId, getShopDomain } from '../../services/storageAPI';
 
 // Detect if the editor is embedded inside an iframe (e.g. inkdyno.com)
 const isEmbedded = (): boolean => {
@@ -68,8 +68,11 @@ export const CartDrawer: React.FC = () => {
           };
         });
 
-        // Build chained /cart/add GET URL (last item → /checkout, each earlier → next add)
-        let finalUrl = '/checkout';
+        // Build absolute Shopify store URL for cart/add GET navigation
+        const shopDomain = getShopDomain() || 'www.inkdyno.com';
+        const storeBase = `https://${shopDomain}`;
+
+        let finalUrl = `${storeBase}/checkout`;
         for (let i = lineItems.length - 1; i >= 0; i--) {
           const item = lineItems[i];
           const params = new URLSearchParams();
@@ -78,8 +81,8 @@ export const CartDrawer: React.FC = () => {
           Object.entries(item.properties).forEach(([k, v]) => {
             params.set(`properties[${k}]`, v);
           });
-          params.set('return_to', finalUrl);
-          finalUrl = '/cart/add?' + params.toString();
+          params.set('return_to', `${storeBase}/checkout`);
+          finalUrl = `${storeBase}/cart/add?` + params.toString();
         }
 
         setCheckoutStatus('Redirecting to checkout...');
