@@ -120,11 +120,14 @@ export function getCustomerInitials(): string {
 export function isAuthenticated(): boolean {
   // Shopify global variable (set by Liquid template)
   if ((window as any).__SHOPIFY_CUSTOMER_ID__) return true;
-  // URL param passed from Shopify Liquid
+  // URL param passed from Shopify Liquid — anon IDs don't count
   const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get('customerId')) return true;
+  const customerId = urlParams.get('customerId');
+  if (customerId && !customerId.startsWith('anon-')) return true;
   // Previously stored real customer ID from a Shopify session
-  return !!localStorage.getItem('gang-sheet-customer-id');
+  const stored = localStorage.getItem('gang-sheet-customer-id');
+  if (stored && !stored.startsWith('anon-')) return true;
+  return false;
 }
 
 // Helper for fetch with customer ID header
