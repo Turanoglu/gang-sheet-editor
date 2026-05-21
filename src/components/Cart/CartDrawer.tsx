@@ -62,10 +62,6 @@ export const CartDrawer: React.FC = () => {
               'Design Name': item.design.name,
               'Board Size': item.design.boardSize.label,
               'Images Count': String(item.design.imageCount),
-              // Only include Preview if it's a real URL (not base64) - Shopify property limit is 255 chars
-            ...(item.design.thumbnailUrl && !item.design.thumbnailUrl.startsWith('data:')
-                ? { 'Preview': item.design.thumbnailUrl }
-                : {}),
             },
           };
         });

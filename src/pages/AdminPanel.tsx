@@ -223,9 +223,9 @@ const OrderViewModal: React.FC<{
 
                   {/* Info */}
                   <div className="flex-1">
-                    <h5 className="font-medium text-gray-800">{item.design.name}</h5>
+                    <h5 className="font-medium text-gray-800">{item.design?.name || '-'}</h5>
                     <p className="text-sm text-gray-500">
-                      {item.design.boardSize.label} • {item.design.imageCount} images
+                      {item.design?.boardSize?.label || '-'} • {item.design?.imageCount ?? 0} images
                     </p>
                     <div className="flex items-center gap-4 mt-2">
                       <span className="text-sm text-gray-600">Qty: {item.quantity}</span>
@@ -594,13 +594,13 @@ export const AdminPanel: React.FC = () => {
     // Download all design full exports in the order
     (order.items ?? []).forEach((item, index) => {
       // Prefer full export URL, fallback to thumbnail
-      const downloadUrl = item.design.fullExportUrl || item.design.thumbnailUrl;
-      
+      const downloadUrl = item.design?.fullExportUrl || item.design?.thumbnailUrl;
+
       if (downloadUrl) {
         setTimeout(() => {
           const link = document.createElement('a');
           link.href = downloadUrl;
-          link.download = `${order.orderNumber}_item${index + 1}_${item.design.name.replace(/\s+/g, '_')}.png`;
+          link.download = `${order.orderNumber}_item${index + 1}_${(item.design?.name || 'design').replace(/\s+/g, '_')}.png`;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
