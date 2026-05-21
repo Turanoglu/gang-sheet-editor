@@ -75,13 +75,22 @@ export const CartDrawer: React.FC = () => {
 
         setCheckoutStatus('Redirecting to checkout...');
 
-        console.log('[GS-CART] Sending gang-sheet-checkout-v2 to parent', lineItems);
-        // Send message to parent (inkdyno.com Liquid template)
-        window.parent.postMessage(
-          { type: 'gang-sheet-checkout-v2', items: lineItems },
-          '*'
-        );
-        console.log('[GS-CART] postMessage sent');
+        // Build cart URL directly and navigate top frame — bypasses postMessage + all interceptors
+        let finalUrl = '/checkout';
+        for (let i = lineItems.length - 1; i >= 0; i--) {
+          const item = lineItems[i];
+          const params = new URLSearchParams();
+          params.set('id', String(item.variantId));
+          params.set('quantity', String(item.quantity || 1));
+          const props = item.properties || {};
+          Object.keys(props).forEach(key => {
+            params.set(`properties[${key}]`, String((props as Record<string, string>)[key]));
+          });
+          params.set('return_to', finalUrl);
+          finalUrl = '/cart/add?' + params.toString();
+        }
+        console.log('[GS-CART] Navigating top to:', finalUrl);
+        window.top!.location.href = finalUrl;
 
       } else {
         // ── Standalone / fallback ──────────────────────────────────────
