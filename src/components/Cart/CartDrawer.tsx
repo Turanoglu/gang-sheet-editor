@@ -75,26 +75,10 @@ export const CartDrawer: React.FC = () => {
 
         setCheckoutStatus('Redirecting to checkout...');
 
-        // Determine Shopify store base URL (absolute so it works from any context)
-        const urlParams = new URLSearchParams(window.location.search);
-        const storeUrl = (urlParams.get('storeUrl') || '').replace(/\/$/, '');
-        const base = storeUrl || 'https://www.inkdyno.com';
-
-        let finalUrl = base + '/checkout';
-        for (let i = lineItems.length - 1; i >= 0; i--) {
-          const item = lineItems[i];
-          const params = new URLSearchParams();
-          params.set('id', String(item.variantId));
-          params.set('quantity', String(item.quantity || 1));
-          const props = item.properties || {};
-          Object.keys(props).forEach(key => {
-            params.set(`properties[${key}]`, String((props as Record<string, string>)[key]));
-          });
-          params.set('return_to', finalUrl);
-          finalUrl = base + '/cart/add?' + params.toString();
-        }
-        console.log('[GS-CART] Navigating to:', finalUrl);
-        window.top!.location.href = finalUrl;
+        window.parent.postMessage(
+          { type: 'gang-sheet-checkout', items: lineItems },
+          '*'
+        );
 
       } else {
         // ── Standalone / fallback ──────────────────────────────────────
