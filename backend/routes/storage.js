@@ -449,9 +449,20 @@ router.post('/upload-image', async (req, res) => {
 
 // ==================== ADMIN ENDPOINTS ====================
 
-// Strip heavy fields not needed by admin UI (keep thumbnailUrl/fullExportUrl as they are presigned URLs, not base64)
+// Strip heavy fields not needed by admin UI.
+// Keep items but remove base64 blobs inside each item's design.
 const stripHeavyFields = (obj) => {
-  const { canvasData, assetsData, items, ...light } = obj;
+  const { canvasData, assetsData, ...light } = obj;
+  if (Array.isArray(light.items)) {
+    light.items = light.items.map(item => {
+      if (!item || !item.design) return item;
+      const { canvasData: _c, assetsData: _a, thumbnailUrl, fullExportUrl, ...lightDesign } = item.design;
+      // Only keep thumbnailUrl/fullExportUrl if they are real URLs (not base64)
+      if (thumbnailUrl && !thumbnailUrl.startsWith('data:')) lightDesign.thumbnailUrl = thumbnailUrl;
+      if (fullExportUrl && !fullExportUrl.startsWith('data:')) lightDesign.fullExportUrl = fullExportUrl;
+      return { ...item, design: lightDesign };
+    });
+  }
   return light;
 };
 
