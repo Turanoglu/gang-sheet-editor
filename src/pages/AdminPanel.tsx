@@ -730,7 +730,7 @@ export const AdminPanel: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="h-screen bg-gray-50 flex overflow-hidden">
       {/* Modals */}
       <ViewModal design={viewDesign} onClose={() => setViewDesign(null)} />
       <OrderViewModal order={viewOrder} onClose={() => setViewOrder(null)} />
