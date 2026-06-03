@@ -18,34 +18,40 @@ async function loadModels() {
 export async function removeBackground(dataUrl: string): Promise<string> {
   await loadModels();
 
-  const image = await RawImage.fromURL(dataUrl);
-  // @ts-ignore — processor typing is generic
-  const { pixel_values } = await _processor!(image);
-  // @ts-ignore
-  const { output } = await _model!({ input: pixel_values });
+  // Blob URL is faster than raw data URL for large upscaled images
+  const srcBlob = await fetch(dataUrl).then(r => r.blob());
+  const blobUrl = URL.createObjectURL(srcBlob);
 
-  // Resize alpha mask back to original image dimensions
-  const mask = await RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(image.width, image.height);
+  try {
+    const image = await RawImage.fromURL(blobUrl);
+    // @ts-ignore — processor typing is generic
+    const { pixel_values } = await _processor!(image);
+    // @ts-ignore
+    const { output } = await _model!({ input: pixel_values });
 
-  // Composite: draw original then apply mask as alpha channel
-  const canvas = document.createElement('canvas');
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const ctx = canvas.getContext('2d')!;
+    // Resize alpha mask back to original dimensions
+    const mask = await RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(image.width, image.height);
 
-  const img = new Image();
-  img.src = dataUrl;
-  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; });
-  ctx.drawImage(img, 0, 0);
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext('2d')!;
 
-  const imgData = ctx.getImageData(0, 0, image.width, image.height);
-  const maskBytes = mask.data as Uint8Array;
-  for (let i = 0; i < maskBytes.length; i++) {
-    imgData.data[4 * i + 3] = maskBytes[i];
+    // Use RawImage's own canvas — avoids HTML Image color-space inconsistencies
+    // @ts-ignore — toCanvas() returns HTMLCanvasElement | OffscreenCanvas
+    ctx.drawImage(image.toCanvas(), 0, 0);
+
+    const imgData = ctx.getImageData(0, 0, image.width, image.height);
+    const maskBytes = mask.data as Uint8Array;
+    for (let i = 0; i < maskBytes.length; i++) {
+      imgData.data[4 * i + 3] = maskBytes[i];
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    return canvas.toDataURL('image/png');
+  } finally {
+    URL.revokeObjectURL(blobUrl);
   }
-  ctx.putImageData(imgData, 0, 0);
-
-  return canvas.toDataURL('image/png');
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
