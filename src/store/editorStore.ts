@@ -14,6 +14,7 @@ import {
   DEFAULT_DPI,
   inchesToPx,
 } from '../types';
+import { getDesignFromCloud } from '../services/storageAPI';
 
 // Helper: get axis-aligned bounding box of a (possibly rotated) item
 function getAABB(item: CanvasItem) {
@@ -841,16 +842,25 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
 
   loadDesign: async (design) => {
     try {
-      const items: import('../types').CanvasItem[] = design.canvasData
-        ? JSON.parse(design.canvasData)
+      // If canvasData is missing, fetch the full design from R2 (may have canvasData for newer designs)
+      let resolvedDesign = design;
+      if (!design.canvasData) {
+        try {
+          const cloudDesign = await getDesignFromCloud(design.id);
+          if (cloudDesign?.canvasData) resolvedDesign = { ...design, ...cloudDesign };
+        } catch { /* use local design as fallback */ }
+      }
+
+      const items: import('../types').CanvasItem[] = resolvedDesign.canvasData
+        ? JSON.parse(resolvedDesign.canvasData)
         : [];
-      let rawAssets: Record<string, import('../types').Asset> = design.assetsData
-        ? JSON.parse(design.assetsData)
+      let rawAssets: Record<string, import('../types').Asset> = resolvedDesign.assetsData
+        ? JSON.parse(resolvedDesign.assetsData)
         : {};
 
       // If assetsData is empty but assetsMetadata exists (cloud format), build rawAssets from it
-      if ((!design.assetsData || Object.keys(rawAssets).length === 0) && (design as any).assetsMetadata) {
-        for (const [id, meta] of Object.entries((design as any).assetsMetadata as Record<string, { name: string; originalWidth: number; originalHeight: number; viewUrl: string }>)) {
+      if ((!resolvedDesign.assetsData || Object.keys(rawAssets).length === 0) && (resolvedDesign as any).assetsMetadata) {
+        for (const [id, meta] of Object.entries((resolvedDesign as any).assetsMetadata as Record<string, { name: string; originalWidth: number; originalHeight: number; viewUrl: string }>)) {
           rawAssets[id] = {
             id,
             name: meta.name,
@@ -880,7 +890,7 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
       set({
         items,
         assets: loadedAssets,
-        boardSize: design.boardSize,
+        boardSize: resolvedDesign.boardSize,
         selectedIds: [],
         history: [],
         historyIndex: -1,
