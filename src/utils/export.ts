@@ -6,38 +6,50 @@ import { inchesToPx } from '../types';
  * Minimal uncompressed TIFF encoder with proper DPI metadata.
  * Produces a valid RGBA TIFF (little-endian) readable by all RIP software.
  */
+/**
+ * Encode as RGB TIFF (3-channel, no alpha) with correct DPI metadata.
+ * DTF production standard: white background, RGB, 300 DPI.
+ * Caller must composite the image onto white before passing pixel data.
+ */
 function writeTiff(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number, dpi = 300): ArrayBuffer {
-  const dataLen = w * h * 4;
+  // Convert RGBA → RGB (alpha already composited on white by caller)
+  const pixelCount = w * h;
+  const rgbData = new Uint8Array(pixelCount * 3);
+  for (let i = 0, j = 0; i < pixelCount; i++, j += 3) {
+    rgbData[j]     = rgba[i * 4];
+    rgbData[j + 1] = rgba[i * 4 + 1];
+    rgbData[j + 2] = rgba[i * 4 + 2];
+  }
+  const dataLen = rgbData.length;
 
-  // IFD layout (14 entries, sorted by tag number):
+  // IFD layout (13 entries — no ExtraSamples for plain RGB):
   //   256 ImageWidth, 257 ImageLength, 258 BitsPerSample (offset),
   //   259 Compression, 262 PhotometricInterpretation, 273 StripOffsets,
   //   277 SamplesPerPixel, 278 RowsPerStrip, 279 StripByteCounts,
   //   282 XResolution (offset), 283 YResolution (offset),
-  //   284 PlanarConfiguration, 296 ResolutionUnit, 338 ExtraSamples
-  const NUM_TAGS  = 14;
-  const IFD_OFF   = 8;                              // right after header
-  const IFD_LEN   = 2 + NUM_TAGS * 12 + 4;
-  // Values requiring file offsets (> 4 bytes):
-  //   BitsPerSample: 4 × SHORT = 8 bytes
-  //   XResolution:   1 RATIONAL = 8 bytes
-  //   YResolution:   1 RATIONAL = 8 bytes
-  const VALS_OFF  = IFD_OFF + IFD_LEN;
-  const BITS_OFF  = VALS_OFF;
-  const XRES_OFF  = VALS_OFF + 8;
-  const YRES_OFF  = VALS_OFF + 16;
-  const DATA_OFF  = VALS_OFF + 24;
+  //   284 PlanarConfiguration, 296 ResolutionUnit
+  const NUM_TAGS = 13;
+  const IFD_OFF  = 8;
+  const IFD_LEN  = 2 + NUM_TAGS * 12 + 4;
+  // Out-of-line values:
+  //   BitsPerSample: 3 × SHORT = 6 bytes (pad to 8)
+  //   XResolution:   RATIONAL = 8 bytes
+  //   YResolution:   RATIONAL = 8 bytes
+  const VALS_OFF = IFD_OFF + IFD_LEN;
+  const BITS_OFF = VALS_OFF;
+  const XRES_OFF = VALS_OFF + 8;
+  const YRES_OFF = VALS_OFF + 16;
+  const DATA_OFF = VALS_OFF + 24;
 
   const buf = new ArrayBuffer(DATA_OFF + dataLen);
   const v   = new DataView(buf);
   const LE  = true;
 
-  // --- TIFF header ---
-  v.setUint16(0, 0x4949, LE);  // 'II' = little-endian
-  v.setUint16(2, 42,     LE);  // magic
-  v.setUint32(4, IFD_OFF, LE); // offset to first IFD
+  // TIFF header (little-endian)
+  v.setUint16(0, 0x4949, LE);
+  v.setUint16(2, 42,     LE);
+  v.setUint32(4, IFD_OFF, LE);
 
-  // --- IFD ---
   let p = IFD_OFF;
   v.setUint16(p, NUM_TAGS, LE); p += 2;
 
@@ -45,40 +57,36 @@ function writeTiff(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number, d
     v.setUint16(p,     tag,   LE);
     v.setUint16(p + 2, type,  LE);
     v.setUint32(p + 4, count, LE);
-    v.setUint32(p + 8, val,   LE); // inline value OR file offset
+    v.setUint32(p + 8, val,   LE);
     p += 12;
   };
 
   // type: 3=SHORT, 4=LONG, 5=RATIONAL
   e(256, 4, 1, w);           // ImageWidth
   e(257, 4, 1, h);           // ImageLength
-  e(258, 3, 4, BITS_OFF);    // BitsPerSample → 4 shorts at BITS_OFF
+  e(258, 3, 3, BITS_OFF);    // BitsPerSample → 3 shorts (8,8,8)
   e(259, 3, 1, 1);           // Compression = none
   e(262, 3, 1, 2);           // PhotometricInterpretation = RGB
   e(273, 4, 1, DATA_OFF);    // StripOffsets
-  e(277, 3, 1, 4);           // SamplesPerPixel = 4 (RGBA)
-  e(278, 4, 1, h);           // RowsPerStrip = full image
+  e(277, 3, 1, 3);           // SamplesPerPixel = 3 (RGB)
+  e(278, 4, 1, h);           // RowsPerStrip
   e(279, 4, 1, dataLen);     // StripByteCounts
-  e(282, 5, 1, XRES_OFF);    // XResolution → rational at XRES_OFF
-  e(283, 5, 1, YRES_OFF);    // YResolution → rational at YRES_OFF
+  e(282, 5, 1, XRES_OFF);    // XResolution
+  e(283, 5, 1, YRES_OFF);    // YResolution
   e(284, 3, 1, 1);           // PlanarConfiguration = chunky
   e(296, 3, 1, 2);           // ResolutionUnit = inch
-  e(338, 3, 1, 2);           // ExtraSamples = unassociated alpha
-  v.setUint32(p, 0, LE);     // next IFD = 0 (last)
+  v.setUint32(p, 0, LE);     // next IFD = 0
 
-  // --- BitsPerSample: 8, 8, 8, 8 ---
-  for (let i = 0; i < 4; i++) v.setUint16(BITS_OFF + i * 2, 8, LE);
+  // BitsPerSample: 8, 8, 8
+  v.setUint16(BITS_OFF,     8, LE);
+  v.setUint16(BITS_OFF + 2, 8, LE);
+  v.setUint16(BITS_OFF + 4, 8, LE);
 
-  // --- XResolution & YResolution rationals: dpi / 1 ---
+  // XResolution and YResolution rationals
   v.setUint32(XRES_OFF,     dpi, LE); v.setUint32(XRES_OFF + 4, 1, LE);
   v.setUint32(YRES_OFF,     dpi, LE); v.setUint32(YRES_OFF + 4, 1, LE);
 
-  // --- Pixel data ---
-  const src = rgba instanceof Uint8ClampedArray
-    ? new Uint8Array(rgba.buffer, rgba.byteOffset, rgba.byteLength)
-    : rgba;
-  new Uint8Array(buf, DATA_OFF).set(src);
-
+  new Uint8Array(buf, DATA_OFF).set(rgbData);
   return buf;
 }
 
@@ -318,13 +326,15 @@ export async function exportAsTiff(options: ExportOptions): Promise<void> {
       height: currentBoardDisplayHeight,
     });
 
-    // Convert dataUrl → RGBA pixel data — transparency preserved (no white fill)
     const img = new Image();
     await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = dataUrl; });
     const canvas = document.createElement('canvas');
     canvas.width = targetWidth;
     canvas.height = targetHeight;
     const ctx = canvas.getContext('2d')!;
+    // White background — DTF production standard (no transparency in print files)
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, targetWidth, targetHeight);
     ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
     const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
 
@@ -364,10 +374,12 @@ export async function downloadAsTiff(dataUrl: string, filename: string): Promise
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d')!;
+  // White background — DTF production standard (no transparency in print files)
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
   ctx.drawImage(img, 0, 0);
   const imageData = ctx.getImageData(0, 0, w, h);
 
-  // 300 DPI is the DTF production standard — matches the design intent
   const tiffBuffer = writeTiff(imageData.data, w, h, 300);
   const blob = new Blob([tiffBuffer], { type: 'image/tiff' });
   const url = URL.createObjectURL(blob);
