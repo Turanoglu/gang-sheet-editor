@@ -10,7 +10,7 @@ let _processor: Awaited<ReturnType<typeof AutoProcessor.from_pretrained>> | null
 async function loadModels() {
   if (_model) return;
   [_model, _processor] = await Promise.all([
-    AutoModel.from_pretrained(MODEL_ID, { config: { model_type: 'custom' } }),
+    AutoModel.from_pretrained(MODEL_ID, { config: { model_type: 'custom' } as any }),
     AutoProcessor.from_pretrained(MODEL_ID),
   ]);
 }
