@@ -82,8 +82,8 @@ router.post('/designs', async (req, res) => {
     }
 
     const key = `users/${customerId}/designs/${design.id}.json`;
-    // Strip heavy base64 fields — they are stored separately in R2 exports
-    const { canvasData, assetsData, fullExportUrl, ...lightDesign } = design;
+    // Strip only base64-heavy fields; keep canvasData and assetsMetadata (URL refs, not blobs)
+    const { assetsData, fullExportUrl, ...lightDesign } = design;
     const designToSave = shopDomain ? { ...lightDesign, shopDomain } : lightDesign;
 
     await s3Client.send(new PutObjectCommand({
@@ -134,6 +134,20 @@ router.get('/designs', async (req, res) => {
               { expiresIn: 86400 }
             );
           } catch { /* keep existing url if key generation fails */ }
+          // Regenerate signed URLs for individual asset images
+          if (design.assetsMetadata && typeof design.assetsMetadata === 'object') {
+            await Promise.all(Object.entries(design.assetsMetadata).map(async ([, meta]) => {
+              if (meta && meta.r2Key) {
+                try {
+                  meta.viewUrl = await getSignedUrl(
+                    s3Client,
+                    new GetObjectCommand({ Bucket: BUCKET_NAME, Key: meta.r2Key }),
+                    { expiresIn: 86400 }
+                  );
+                } catch { /* skip if asset missing */ }
+              }
+            }));
+          }
           return design;
         } catch (err) {
           console.error(`Error reading design ${obj.Key}:`, err);
@@ -408,7 +422,7 @@ router.get('/download-url', async (req, res) => {
 router.post('/upload-image', async (req, res) => {
   try {
     const customerId = getCustomerId(req);
-    const { designId, imageData, imageType, fileType } = req.body;
+    const { designId, imageData, imageType, fileType, assetId } = req.body;
 
     if (!designId || !imageData) {
       return res.status(400).json({ error: 'designId and imageData are required' });
@@ -419,8 +433,14 @@ router.post('/upload-image', async (req, res) => {
     const buffer = Buffer.from(base64Data, 'base64');
 
     const extension = fileType?.split('/')[1] || 'png';
-    const filename = imageType === 'thumbnail' ? 'thumbnail' : 'full-export';
-    const key = `exports/${customerId}/${designId}/${filename}.${extension}`;
+    let key;
+    if (imageType === 'thumbnail') {
+      key = `exports/${customerId}/${designId}/thumbnail.${extension}`;
+    } else if (imageType === 'asset' && assetId) {
+      key = `exports/${customerId}/${designId}/assets/${assetId}.${extension}`;
+    } else {
+      key = `exports/${customerId}/${designId}/full-export.${extension}`;
+    }
 
     await s3Client.send(new PutObjectCommand({
       Bucket: BUCKET_NAME,

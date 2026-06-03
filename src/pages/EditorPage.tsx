@@ -70,7 +70,7 @@ export const EditorPage: React.FC = () => {
     addSheet(thumb || undefined);
   }, [addSheet]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { addToCart, getItemCount, openCart } = useCartStore();
+  const { addToCart, removeFromCart, getItemCount, openCart } = useCartStore();
   const { saveDesign, createOrder, currentDesign, setCurrentDesign } = useOrderStore();
 
   const cartItemCount = getItemCount();
@@ -340,6 +340,13 @@ export const EditorPage: React.FC = () => {
     }));
 
     const order = createOrder(customerName, orderCartItems, 'In Cart');
+
+    // Clear stale cart items: remove any existing items for these designs and orphaned items (no orderId)
+    const designIds = new Set(designs.map(d => d.id));
+    const { items: currentCartItems } = useCartStore.getState();
+    currentCartItems
+      .filter(item => designIds.has(item.designId) || !item.orderId)
+      .forEach(item => removeFromCart(item.id));
 
     // Add each sheet to the cart under the same order
     designs.forEach((design) => addToCart(design, quantity, order.id));

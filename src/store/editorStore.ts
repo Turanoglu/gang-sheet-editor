@@ -844,9 +844,23 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
       const items: import('../types').CanvasItem[] = design.canvasData
         ? JSON.parse(design.canvasData)
         : [];
-      const rawAssets: Record<string, import('../types').Asset> = design.assetsData
+      let rawAssets: Record<string, import('../types').Asset> = design.assetsData
         ? JSON.parse(design.assetsData)
         : {};
+
+      // If assetsData is empty but assetsMetadata exists (cloud format), build rawAssets from it
+      if ((!design.assetsData || Object.keys(rawAssets).length === 0) && (design as any).assetsMetadata) {
+        for (const [id, meta] of Object.entries((design as any).assetsMetadata as Record<string, { name: string; originalWidth: number; originalHeight: number; viewUrl: string }>)) {
+          rawAssets[id] = {
+            id,
+            name: meta.name,
+            originalWidth: meta.originalWidth,
+            originalHeight: meta.originalHeight,
+            dataUrl: meta.viewUrl || '',
+            imageEl: new window.Image(),
+          };
+        }
+      }
 
       // imageEl is a DOM object — it cannot be serialized to JSON.
       // Recreate each HTMLImageElement from the stored dataUrl.

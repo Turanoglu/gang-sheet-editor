@@ -131,8 +131,16 @@ export const useOrderStore = create<ExtendedOrderStore>()(
           const cloudDesignMap = new Map(cloudDesigns.map(d => [d.id, d]));
           const cloudOrderMap = new Map(cloudOrders.map(o => [o.id, o]));
 
-          // Merge: cloud overwrites local, keep local-only items for sync
-          const mergedDesigns = [...cloudDesigns];
+          // Merge: cloud takes priority but preserve canvasData/assetsData from local if cloud lacks them
+          const localDesignMap = new Map(localDesigns.map(d => [d.id, d]));
+          const mergedDesigns = cloudDesigns.map(cloudD => {
+            const localD = localDesignMap.get(cloudD.id);
+            return {
+              ...cloudD,
+              canvasData: cloudD.canvasData || localD?.canvasData || '',
+              assetsData: cloudD.assetsData || localD?.assetsData || '',
+            };
+          });
           const localOnlyDesigns = localDesigns.filter(d => !cloudDesignMap.has(d.id));
 
           const mergedOrders = [...cloudOrders];
@@ -243,6 +251,37 @@ export const useOrderStore = create<ExtendedOrderStore>()(
               cloudDesign.fullExportUrl = result.viewUrl;
             } catch (err) {
               console.warn('Failed to upload full export:', err);
+            }
+          }
+
+          // Upload each asset's dataUrl to R2 and build assetsMetadata
+          if (design.assetsData) {
+            try {
+              const rawAssets: Record<string, { id: string; name: string; originalWidth: number; originalHeight: number; dataUrl: string }> = JSON.parse(design.assetsData);
+              const assetsMetadata: Record<string, { name: string; originalWidth: number; originalHeight: number; r2Key: string; viewUrl: string }> = {};
+              await Promise.all(
+                Object.entries(rawAssets).map(async ([assetId, asset]) => {
+                  if (asset.dataUrl && asset.dataUrl.startsWith('data:')) {
+                    try {
+                      const result = await uploadImageToCloud(design.id, asset.dataUrl, 'asset', 'image/png', assetId);
+                      assetsMetadata[assetId] = {
+                        name: asset.name,
+                        originalWidth: asset.originalWidth,
+                        originalHeight: asset.originalHeight,
+                        r2Key: result.key,
+                        viewUrl: result.viewUrl,
+                      };
+                    } catch (err) {
+                      console.warn(`Failed to upload asset ${assetId}:`, err);
+                    }
+                  }
+                })
+              );
+              if (Object.keys(assetsMetadata).length > 0) {
+                (cloudDesign as any).assetsMetadata = assetsMetadata;
+              }
+            } catch (err) {
+              console.warn('Failed to upload assets:', err);
             }
           }
 
@@ -375,8 +414,8 @@ export const useOrderStore = create<ExtendedOrderStore>()(
       storage: safeLocalStorage,
       partialize: (state) => ({
         orders: state.orders,
-        // Strip large base64 fields — they are stored in R2 cloud, not localStorage
-        designs: state.designs.map(({ canvasData: _c, assetsData: _a, thumbnailUrl: _t, fullExportUrl: _f, ...d }) => d),
+        // Strip large base64 fields — stored in R2. Keep canvasData (small JSON, needed for Edit)
+        designs: state.designs.map(({ assetsData: _a, thumbnailUrl: _t, fullExportUrl: _f, ...d }) => d),
       }),
     }
   )

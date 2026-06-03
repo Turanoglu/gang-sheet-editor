@@ -302,8 +302,9 @@ export async function deleteOrderFromCloud(orderId: string): Promise<boolean> {
 export async function uploadImageToCloud(
   designId: string,
   imageData: string,
-  imageType: 'thumbnail' | 'full-export' = 'thumbnail',
-  fileType: string = 'image/png'
+  imageType: 'thumbnail' | 'full-export' | 'asset' = 'thumbnail',
+  fileType: string = 'image/png',
+  assetId?: string
 ): Promise<{ success: boolean; key: string; viewUrl: string }> {
   try {
     const response = await fetchWithAuth(`${API_BASE_URL}/api/storage/upload-image`, {
@@ -313,6 +314,7 @@ export async function uploadImageToCloud(
         imageData,
         imageType,
         fileType,
+        ...(assetId && { assetId }),
       }),
     });
 
