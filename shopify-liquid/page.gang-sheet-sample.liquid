@@ -140,8 +140,13 @@
           finalUrl = '/cart/add?' + params.toString();
         }
 
-        console.log('[GS] Navigating to cart:', finalUrl);
-        window.location.href = finalUrl;
+        // Clear existing Shopify cart first so previous sessions don't accumulate
+        fetch('/cart/clear.js', { method: 'POST' })
+          .catch(function() {}) // proceed even if clear fails
+          .then(function() {
+            console.log('[GS] Navigating to cart:', finalUrl);
+            window.location.href = finalUrl;
+          });
 
       } catch (e) {
         console.error('[GS] Checkout error:', e);

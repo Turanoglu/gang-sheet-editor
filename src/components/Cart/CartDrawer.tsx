@@ -68,30 +68,16 @@ export const CartDrawer: React.FC = () => {
           };
         });
 
-        // Build absolute Shopify store URL for cart/add GET navigation
-        const shopDomain = getShopDomain() || 'www.inkdyno.com';
-        const storeBase = `https://${shopDomain}`;
-
-        // return_to must be relative — Shopify rejects absolute URLs as open-redirect
-        let finalUrl = `${storeBase}/checkout`;
-        for (let i = lineItems.length - 1; i >= 0; i--) {
-          const item = lineItems[i];
-          const params = new URLSearchParams();
-          params.set('id', String(item.variantId));
-          params.set('quantity', String(item.quantity));
-          Object.entries(item.properties).forEach(([k, v]) => {
-            params.set(`properties[${k}]`, v);
-          });
-          params.set('return_to', '/checkout');
-          finalUrl = `${storeBase}/cart/add?` + params.toString();
-        }
-
         setCheckoutStatus('Redirecting to checkout...');
         clearCart();
         closeCart();
 
-        // Navigate top-level window — allowed from cross-origin iframes
-        window.open(finalUrl, '_top');
+        // Send postMessage to Shopify parent page — it clears the cart first,
+        // then chains /cart/add GET navigations correctly for all items.
+        window.parent.postMessage({
+          type: 'gang-sheet-checkout',
+          items: lineItems,
+        }, '*');
 
       } else {
         // ── Standalone / fallback ──────────────────────────────────────
