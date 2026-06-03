@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useCartStore } from '../../store/cartStore';
 import { useOrderStore } from '../../store/orderStore';
 import { getVariantId, areVariantsConfigured } from '../../config/shopifyVariants';
-import { getCustomerName, getCustomerId, getShopDomain } from '../../services/storageAPI';
+import { getCustomerName, getCustomerId } from '../../services/storageAPI';
 
 // Detect if the editor is embedded inside an iframe (e.g. inkdyno.com)
 const isEmbedded = (): boolean => {
