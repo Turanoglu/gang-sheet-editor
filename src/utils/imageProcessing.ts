@@ -1,17 +1,51 @@
-import { removeBackground as imglyRemoveBg } from '@imgly/background-removal';
+import { AutoModel, AutoProcessor, RawImage, env } from '@huggingface/transformers';
+
+env.allowLocalModels = false;
+env.useBrowserCache = true;
+
+const MODEL_ID = 'briaai/RMBG-1.4';
+let _model: Awaited<ReturnType<typeof AutoModel.from_pretrained>> | null = null;
+let _processor: Awaited<ReturnType<typeof AutoProcessor.from_pretrained>> | null = null;
+
+async function loadModels() {
+  if (_model) return;
+  [_model, _processor] = await Promise.all([
+    AutoModel.from_pretrained(MODEL_ID, { config: { model_type: 'custom' } }),
+    AutoProcessor.from_pretrained(MODEL_ID),
+  ]);
+}
 
 export async function removeBackground(dataUrl: string): Promise<string> {
-  const blob = await imglyRemoveBg(dataUrl, {
-    model: 'isnet',
-    output: { format: 'image/png', quality: 1 },
-    rescale: false,
-  });
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+  await loadModels();
+
+  const image = await RawImage.fromURL(dataUrl);
+  // @ts-ignore — processor typing is generic
+  const { pixel_values } = await _processor!(image);
+  // @ts-ignore
+  const { output } = await _model!({ input: pixel_values });
+
+  // Resize alpha mask back to original image dimensions
+  const mask = await RawImage.fromTensor(output[0].mul(255).to('uint8')).resize(image.width, image.height);
+
+  // Composite: draw original then apply mask as alpha channel
+  const canvas = document.createElement('canvas');
+  canvas.width = image.width;
+  canvas.height = image.height;
+  const ctx = canvas.getContext('2d')!;
+
+  const img = new Image();
+  img.src = dataUrl;
+  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; });
+  ctx.drawImage(img, 0, 0);
+
+  const imgData = ctx.getImageData(0, 0, image.width, image.height);
+  const maskBytes = mask.data as Uint8Array;
+  for (let i = 0; i < maskBytes.length; i++) {
+    imgData.data[4 * i + 3] = maskBytes[i];
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  return canvas.toDataURL('image/png');
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {

@@ -1,7 +1,86 @@
 import Konva from 'konva';
-import UTIF from 'utif';
 import type { BoardSize } from '../types';
 import { inchesToPx } from '../types';
+
+/**
+ * Minimal uncompressed TIFF encoder with proper DPI metadata.
+ * Produces a valid RGBA TIFF (little-endian) readable by all RIP software.
+ */
+function writeTiff(rgba: Uint8ClampedArray | Uint8Array, w: number, h: number, dpi = 300): ArrayBuffer {
+  const dataLen = w * h * 4;
+
+  // IFD layout (14 entries, sorted by tag number):
+  //   256 ImageWidth, 257 ImageLength, 258 BitsPerSample (offset),
+  //   259 Compression, 262 PhotometricInterpretation, 273 StripOffsets,
+  //   277 SamplesPerPixel, 278 RowsPerStrip, 279 StripByteCounts,
+  //   282 XResolution (offset), 283 YResolution (offset),
+  //   284 PlanarConfiguration, 296 ResolutionUnit, 338 ExtraSamples
+  const NUM_TAGS  = 14;
+  const IFD_OFF   = 8;                              // right after header
+  const IFD_LEN   = 2 + NUM_TAGS * 12 + 4;
+  // Values requiring file offsets (> 4 bytes):
+  //   BitsPerSample: 4 × SHORT = 8 bytes
+  //   XResolution:   1 RATIONAL = 8 bytes
+  //   YResolution:   1 RATIONAL = 8 bytes
+  const VALS_OFF  = IFD_OFF + IFD_LEN;
+  const BITS_OFF  = VALS_OFF;
+  const XRES_OFF  = VALS_OFF + 8;
+  const YRES_OFF  = VALS_OFF + 16;
+  const DATA_OFF  = VALS_OFF + 24;
+
+  const buf = new ArrayBuffer(DATA_OFF + dataLen);
+  const v   = new DataView(buf);
+  const LE  = true;
+
+  // --- TIFF header ---
+  v.setUint16(0, 0x4949, LE);  // 'II' = little-endian
+  v.setUint16(2, 42,     LE);  // magic
+  v.setUint32(4, IFD_OFF, LE); // offset to first IFD
+
+  // --- IFD ---
+  let p = IFD_OFF;
+  v.setUint16(p, NUM_TAGS, LE); p += 2;
+
+  const e = (tag: number, type: number, count: number, val: number) => {
+    v.setUint16(p,     tag,   LE);
+    v.setUint16(p + 2, type,  LE);
+    v.setUint32(p + 4, count, LE);
+    v.setUint32(p + 8, val,   LE); // inline value OR file offset
+    p += 12;
+  };
+
+  // type: 3=SHORT, 4=LONG, 5=RATIONAL
+  e(256, 4, 1, w);           // ImageWidth
+  e(257, 4, 1, h);           // ImageLength
+  e(258, 3, 4, BITS_OFF);    // BitsPerSample → 4 shorts at BITS_OFF
+  e(259, 3, 1, 1);           // Compression = none
+  e(262, 3, 1, 2);           // PhotometricInterpretation = RGB
+  e(273, 4, 1, DATA_OFF);    // StripOffsets
+  e(277, 3, 1, 4);           // SamplesPerPixel = 4 (RGBA)
+  e(278, 4, 1, h);           // RowsPerStrip = full image
+  e(279, 4, 1, dataLen);     // StripByteCounts
+  e(282, 5, 1, XRES_OFF);    // XResolution → rational at XRES_OFF
+  e(283, 5, 1, YRES_OFF);    // YResolution → rational at YRES_OFF
+  e(284, 3, 1, 1);           // PlanarConfiguration = chunky
+  e(296, 3, 1, 2);           // ResolutionUnit = inch
+  e(338, 3, 1, 2);           // ExtraSamples = unassociated alpha
+  v.setUint32(p, 0, LE);     // next IFD = 0 (last)
+
+  // --- BitsPerSample: 8, 8, 8, 8 ---
+  for (let i = 0; i < 4; i++) v.setUint16(BITS_OFF + i * 2, 8, LE);
+
+  // --- XResolution & YResolution rationals: dpi / 1 ---
+  v.setUint32(XRES_OFF,     dpi, LE); v.setUint32(XRES_OFF + 4, 1, LE);
+  v.setUint32(YRES_OFF,     dpi, LE); v.setUint32(YRES_OFF + 4, 1, LE);
+
+  // --- Pixel data ---
+  const src = rgba instanceof Uint8ClampedArray
+    ? new Uint8Array(rgba.buffer, rgba.byteOffset, rgba.byteLength)
+    : rgba;
+  new Uint8Array(buf, DATA_OFF).set(src);
+
+  return buf;
+}
 
 export interface ExportOptions {
   stage: Konva.Stage;
@@ -249,14 +328,13 @@ export async function exportAsTiff(options: ExportOptions): Promise<void> {
     ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
     const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
 
-    // UTIF.encodeImage expects RGBA (4-channel) — transparency preserved
-    const tiffBuffer = UTIF.encodeImage(new Uint8Array(imageData.data.buffer), targetWidth, targetHeight);
+    const tiffBuffer = writeTiff(imageData.data, targetWidth, targetHeight, dpi);
 
     // Download
     const blob = new Blob([tiffBuffer], { type: 'image/tiff' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.download = `gang-sheet-${boardSize.width}x${boardSize.height}-${Date.now()}.tiff`;
+    link.download = `gang-sheet-${boardSize.width}x${boardSize.height}-${dpi}dpi-${Date.now()}.tiff`;
     link.href = url;
     document.body.appendChild(link);
     link.click();
@@ -289,8 +367,8 @@ export async function downloadAsTiff(dataUrl: string, filename: string): Promise
   ctx.drawImage(img, 0, 0);
   const imageData = ctx.getImageData(0, 0, w, h);
 
-  // UTIF.encodeImage expects RGBA (4-channel) — transparency preserved
-  const tiffBuffer = UTIF.encodeImage(new Uint8Array(imageData.data.buffer), w, h);
+  // 300 DPI is the DTF production standard — matches the design intent
+  const tiffBuffer = writeTiff(imageData.data, w, h, 300);
   const blob = new Blob([tiffBuffer], { type: 'image/tiff' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
