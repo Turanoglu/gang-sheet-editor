@@ -180,6 +180,7 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     get().pushToHistory();
 
     const spacingPx = autoFillSettings.spacingPx;
+    const marginPx = autoFillSettings.marginPx;
     const boardWidth = getBoardPxWidth();
     const boardHeight = getBoardPxHeight();
 
@@ -200,27 +201,30 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
             ei.y + ei.height - TOLERANCE > y,
         );
 
+      const maxX = boardWidth - marginPx - w;
+      const maxY = boardHeight - marginPx - h;
+
       // Try right of source
       let x = startX + w + spacingPx;
       let y = startY;
-      if (x + w <= boardWidth && !overlaps(x, y)) return { x, y };
+      if (x <= maxX && !overlaps(x, y)) return { x, y };
 
       // Try below source
       x = startX;
       y = startY + h + spacingPx;
-      if (y + h <= boardHeight && !overlaps(x, y)) return { x, y };
+      if (y <= maxY && !overlaps(x, y)) return { x, y };
 
-      // Scan top-to-bottom, left-to-right for first free slot
-      for (let row = 0; row + h <= boardHeight; row += spacingPx || 1) {
-        for (let col = 0; col + w <= boardWidth; col += spacingPx || 1) {
+      // Scan top-to-bottom, left-to-right within margin bounds
+      for (let row = marginPx; row <= maxY; row += spacingPx || 1) {
+        for (let col = marginPx; col <= maxX; col += spacingPx || 1) {
           if (!overlaps(col, row)) return { x: col, y: row };
         }
       }
 
-      // Fallback: clamp with offset
+      // Fallback: clamp within margin bounds
       return {
-        x: Math.max(0, Math.min(startX + spacingPx * 2, boardWidth - w)),
-        y: Math.max(0, Math.min(startY + spacingPx * 2, boardHeight - h)),
+        x: Math.max(marginPx, Math.min(startX + spacingPx * 2, maxX)),
+        y: Math.max(marginPx, Math.min(startY + spacingPx * 2, maxY)),
       };
     };
 
@@ -253,6 +257,7 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     get().pushToHistory();
 
     const spacingPx = autoFillSettings.spacingPx;
+    const marginPx = autoFillSettings.marginPx;
     const boardWidth = getBoardPxWidth();
     const boardHeight = getBoardPxHeight();
     const maxZIndex = Math.max(...items.map((i) => i.zIndex), 0);
@@ -278,23 +283,26 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
       startX: number,
       startY: number,
     ): { x: number; y: number } => {
+      const maxX = boardWidth - marginPx - w;
+      const maxY = boardHeight - marginPx - h;
+
       let x = startX + w + spacingPx;
       let y = startY;
-      if (x + w <= boardWidth && !overlaps(x, y, w, h, existing)) return { x, y };
+      if (x <= maxX && !overlaps(x, y, w, h, existing)) return { x, y };
 
       x = startX;
       y = startY + h + spacingPx;
-      if (y + h <= boardHeight && !overlaps(x, y, w, h, existing)) return { x, y };
+      if (y <= maxY && !overlaps(x, y, w, h, existing)) return { x, y };
 
-      for (let row = 0; row + h <= boardHeight; row += spacingPx || 1) {
-        for (let col = 0; col + w <= boardWidth; col += spacingPx || 1) {
+      for (let row = marginPx; row <= maxY; row += spacingPx || 1) {
+        for (let col = marginPx; col <= maxX; col += spacingPx || 1) {
           if (!overlaps(col, row, w, h, existing)) return { x: col, y: row };
         }
       }
 
       return {
-        x: Math.max(0, Math.min(startX + spacingPx * 2, boardWidth - w)),
-        y: Math.max(0, Math.min(startY + spacingPx * 2, boardHeight - h)),
+        x: Math.max(marginPx, Math.min(startX + spacingPx * 2, maxX)),
+        y: Math.max(marginPx, Math.min(startY + spacingPx * 2, maxY)),
       };
     };
 
