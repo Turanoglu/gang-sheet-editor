@@ -239,29 +239,20 @@ export async function exportAsTiff(options: ExportOptions): Promise<void> {
       height: currentBoardDisplayHeight,
     });
 
-    // Convert dataUrl → RGB pixel data via canvas (white background for print-ready TIFF)
+    // Convert dataUrl → RGBA pixel data via canvas (white background for print-ready TIFF)
     const img = new Image();
     await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = dataUrl; });
     const canvas = document.createElement('canvas');
     canvas.width = targetWidth;
     canvas.height = targetHeight;
     const ctx = canvas.getContext('2d')!;
-    // Composite onto white — removes alpha channel issues in UTIF encoding
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, targetWidth, targetHeight);
     ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
     const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
 
-    // Extract RGB (drop alpha) — UTIF handles 3-channel data cleanly
-    const rgbData = new Uint8Array(targetWidth * targetHeight * 3);
-    for (let i = 0, j = 0; i < imageData.data.length; i += 4, j += 3) {
-      rgbData[j]     = imageData.data[i];
-      rgbData[j + 1] = imageData.data[i + 1];
-      rgbData[j + 2] = imageData.data[i + 2];
-    }
-
-    // Encode TIFF
-    const tiffBuffer = UTIF.encodeImage(rgbData, targetWidth, targetHeight);
+    // UTIF.encodeImage expects RGBA (4-channel) data
+    const tiffBuffer = UTIF.encodeImage(new Uint8Array(imageData.data.buffer), targetWidth, targetHeight);
 
     // Download
     const blob = new Blob([tiffBuffer], { type: 'image/tiff' });
@@ -303,14 +294,8 @@ export async function downloadAsTiff(dataUrl: string, filename: string): Promise
   ctx.drawImage(img, 0, 0);
   const imageData = ctx.getImageData(0, 0, w, h);
 
-  // Extract RGB (drop alpha) for clean UTIF encoding
-  const rgbData = new Uint8Array(w * h * 3);
-  for (let i = 0, j = 0; i < imageData.data.length; i += 4, j += 3) {
-    rgbData[j]     = imageData.data[i];
-    rgbData[j + 1] = imageData.data[i + 1];
-    rgbData[j + 2] = imageData.data[i + 2];
-  }
-  const tiffBuffer = UTIF.encodeImage(rgbData, w, h);
+  // UTIF.encodeImage expects RGBA (4-channel) data
+  const tiffBuffer = UTIF.encodeImage(new Uint8Array(imageData.data.buffer), w, h);
   const blob = new Blob([tiffBuffer], { type: 'image/tiff' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
