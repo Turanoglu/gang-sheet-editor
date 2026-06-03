@@ -2,8 +2,9 @@ import { removeBackground as imglyRemoveBg } from '@imgly/background-removal';
 
 export async function removeBackground(dataUrl: string): Promise<string> {
   const blob = await imglyRemoveBg(dataUrl, {
-    model: 'large',
+    model: 'isnet',
     output: { format: 'image/png', quality: 1 },
+    rescale: false,
   });
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

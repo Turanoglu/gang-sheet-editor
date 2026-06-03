@@ -239,19 +239,17 @@ export async function exportAsTiff(options: ExportOptions): Promise<void> {
       height: currentBoardDisplayHeight,
     });
 
-    // Convert dataUrl → RGBA pixel data via canvas (white background for print-ready TIFF)
+    // Convert dataUrl → RGBA pixel data — transparency preserved (no white fill)
     const img = new Image();
     await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = rej; img.src = dataUrl; });
     const canvas = document.createElement('canvas');
     canvas.width = targetWidth;
     canvas.height = targetHeight;
     const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, targetWidth, targetHeight);
     ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
     const imageData = ctx.getImageData(0, 0, targetWidth, targetHeight);
 
-    // UTIF.encodeImage expects RGBA (4-channel) data
+    // UTIF.encodeImage expects RGBA (4-channel) — transparency preserved
     const tiffBuffer = UTIF.encodeImage(new Uint8Array(imageData.data.buffer), targetWidth, targetHeight);
 
     // Download
@@ -288,13 +286,10 @@ export async function downloadAsTiff(dataUrl: string, filename: string): Promise
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d')!;
-  // Composite onto white — fixes garbled output with transparent/bg-removed images
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, w, h);
   ctx.drawImage(img, 0, 0);
   const imageData = ctx.getImageData(0, 0, w, h);
 
-  // UTIF.encodeImage expects RGBA (4-channel) data
+  // UTIF.encodeImage expects RGBA (4-channel) — transparency preserved
   const tiffBuffer = UTIF.encodeImage(new Uint8Array(imageData.data.buffer), w, h);
   const blob = new Blob([tiffBuffer], { type: 'image/tiff' });
   const url = URL.createObjectURL(blob);
