@@ -32,8 +32,8 @@ function getAABB(item: CanvasItem) {
 
 const DEFAULT_AUTO_FILL_SETTINGS: AutoFillSettings = {
   mode: 'repeat-selected',
-  spacingPx: inchesToPx(0.1), // 0.1 inch spacing
-  marginPx: inchesToPx(0.25), // 0.25 inch margin
+  spacingPx: inchesToPx(0.125), // 0.125 inch spacing (DTF industry standard)
+  marginPx: inchesToPx(0.5),   // 0.5 inch edge margin (DTF cutting allowance)
   align: 'top-left',
   alternateRowOffset: false,
 };
