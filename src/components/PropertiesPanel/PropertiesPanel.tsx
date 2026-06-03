@@ -177,7 +177,7 @@ export const PropertiesPanel: React.FC<{
       <div className="p-3 bg-white border-b border-gray-200">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-semibold text-gray-700">
-            ({sheets.length}) Gang Sheet{sheets.length > 1 ? 's' : ''}
+            ({sheets.length}) GangFlow Sheet{sheets.length > 1 ? 's' : ''}
           </h2>
           <button
             onClick={() => onAddSheet ? onAddSheet() : addSheet()}
@@ -393,7 +393,7 @@ export const PropertiesPanel: React.FC<{
       {/* Footer */}
       <div className="p-4 border-t border-gray-200 bg-white">
         <p className="text-[10px] text-gray-400 text-center">
-          Powered by Gang Sheet Editor
+          Powered by GangFlow
         </p>
       </div>
     </div>

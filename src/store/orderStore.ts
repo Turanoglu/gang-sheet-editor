@@ -317,7 +317,7 @@ export const useOrderStore = create<ExtendedOrderStore>()(
           totalAmount,
           createdAt: new Date(),
           updatedAt: new Date(),
-          product: 'Gang Sheet',
+          product: 'GangFlow',
         };
 
         // Update local state

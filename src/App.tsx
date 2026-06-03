@@ -47,7 +47,7 @@ function ShopifyAuthGate({ children }: { children: React.ReactNode }) {
           </div>
           <h2 className="text-xl font-bold text-gray-800 mb-2">Mağazamıza Hoş Geldiniz</h2>
           <p className="text-gray-500 mb-6 text-sm">
-            Gang Sheet editörünü kullanmak için Shopify mağazamızdan giriş yapmanız gerekmektedir.
+            GangFlow editörünü kullanmak için Shopify mağazamızdan giriş yapmanız gerekmektedir.
           </p>
           <button
             onClick={() => { (window.top || window).location.href = SHOPIFY_LOGIN_URL; }}

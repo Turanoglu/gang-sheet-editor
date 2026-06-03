@@ -290,11 +290,11 @@ export const EditorPage: React.FC = () => {
     const nonEmptySheets = allSheets.filter((s) => s.items.length > 0);
 
     if (nonEmptySheets.length === 0) {
-      alert('Please add at least one image to your gang sheet before adding to cart.');
+      alert('Please add at least one image to your GangFlow sheet before adding to cart.');
       return;
     }
 
-    const baseName = editingDesign?.name ?? 'New Gang Sheet';
+    const baseName = editingDesign?.name ?? 'New GangFlow Sheet';
     const now = new Date();
 
     // Create a design object for each non-empty sheet
@@ -350,7 +350,7 @@ export const EditorPage: React.FC = () => {
     const notification = document.createElement('div');
     notification.className = 'fixed top-20 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-[100] animate-pulse';
     notification.textContent = designs.length > 1
-      ? `✓ ${designs.length} gang sheets added to cart!`
+      ? `✓ ${designs.length} GangFlow sheet${designs.length > 1 ? 's' : ''} added to cart!`
       : '✓ Added to cart successfully!';
     document.body.appendChild(notification);
     setTimeout(() => notification.remove(), 2000);
@@ -370,10 +370,8 @@ export const EditorPage: React.FC = () => {
         {/* Left - Logo & Quantity */}
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">GS</span>
-            </div>
-            <span className="font-semibold text-gray-700">Gang Sheet Builder</span>
+            <img src="/gangflow-logo.svg" alt="GangFlow" className="w-8 h-8" />
+            <span className="font-semibold text-gray-700">GangFlow</span>
           </div>
           
           <div className="flex items-center gap-2 pl-6 border-l border-gray-200">
