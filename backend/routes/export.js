@@ -26,12 +26,14 @@ const streamToBuffer = async (stream) => {
   return Buffer.concat(chunks);
 };
 
-// Max DPI that fits within memory budget (RGBA = 4 bytes/pixel)
-function safeDpi(boardW, boardH, budgetMB = 320) {
+// Max DPI that fits within memory budget.
+// Sharp composite keeps ~3 buffers in memory simultaneously (src, dst, result).
+// Free tier = 512MB total; Node.js + sharp overhead ~80MB → usable ~400MB → per-buffer ~130MB.
+function safeDpi(boardW, boardH, budgetMB = 130) {
   const maxPixels = (budgetMB * 1024 * 1024) / 4;
   const rawDpi = Math.sqrt(maxPixels / (boardW * boardH));
-  // Round down to nearest 50, cap at 300
-  return Math.min(300, Math.floor(rawDpi / 50) * 50) || 150;
+  // Round down to nearest 25, cap at 300, floor at 72
+  return Math.max(72, Math.min(300, Math.floor(rawDpi / 25) * 25));
 }
 
 // Minimal uncompressed TIFF encoder — ported from frontend export.ts
@@ -158,9 +160,13 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
     // Sort items by zIndex ascending
     const sorted = [...items].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
 
-    // Build sharp composite layers
-    const layers = [];
+    // Start with white background as PNG buffer
+    let canvas = await sharp({
+      create: { width: boardPxW, height: boardPxH, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
+    }).png().toBuffer();
 
+    // Composite items one at a time to keep peak memory low
+    // (avoids holding all layer buffers simultaneously)
     for (const item of sorted) {
       const meta = assetsMetadata[item.assetId];
       if (!meta?.r2Key) {
@@ -176,7 +182,6 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
         const tH = Math.max(1, Math.round(item.height * scale));
 
         let img = sharp(assetBuf).resize(tW, tH, { fit: 'fill' }).ensureAlpha();
-
         if (item.flipX) img = img.flop();
         if (item.flipY) img = img.flip();
 
@@ -184,23 +189,15 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
         const rotation = item.rotation ?? 0;
 
         if (rotation !== 0) {
-          // Sharp rotates around the IMAGE CENTER.
-          // Konva rotates around the item's top-left corner (item.x, item.y).
-          // Compute where the original image center ends up after Konva-style rotation:
           const θ   = (rotation * Math.PI) / 180;
           const cos = Math.cos(θ);
           const sin = Math.sin(θ);
-
           const new_cx = item.x * scale + (tW / 2) * cos - (tH / 2) * sin;
           const new_cy = item.y * scale + (tW / 2) * sin + (tH / 2) * cos;
-
-          // Rotated bounding box after sharp.rotate() (expand = true by default)
           const rotW = tW * Math.abs(cos) + tH * Math.abs(sin);
           const rotH = tW * Math.abs(sin) + tH * Math.abs(cos);
-
           compLeft = Math.round(new_cx - rotW / 2);
           compTop  = Math.round(new_cy - rotH / 2);
-
           img = img.rotate(rotation, { background: { r: 0, g: 0, b: 0, alpha: 0 } });
         } else {
           compLeft = Math.round(item.x * scale);
@@ -208,24 +205,20 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
         }
 
         const layerBuf = await img.png().toBuffer();
-        layers.push({
-          input: layerBuf,
-          left:  Math.max(0, compLeft),
-          top:   Math.max(0, compTop),
-          blend: 'over',
-        });
+
+        // Composite this single layer onto current canvas, replace canvas buffer
+        canvas = await sharp(canvas)
+          .composite([{ input: layerBuf, left: Math.max(0, compLeft), top: Math.max(0, compTop), blend: 'over' }])
+          .png()
+          .toBuffer();
+
       } catch (err) {
         console.warn(`[export] Skipping item ${item.id}:`, err.message);
       }
     }
 
-    // Composite all layers onto white background, extract raw RGBA
-    const { data } = await sharp({
-      create: { width: boardPxW, height: boardPxH, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
-    })
-      .composite(layers)
-      .raw()
-      .toBuffer({ resolveWithObject: true });
+    // Final: extract raw RGBA for TIFF encoding
+    const { data } = await sharp(canvas).raw().toBuffer({ resolveWithObject: true });
 
     const tiffBuf = writeTiff(data, boardPxW, boardPxH, dpi);
 
