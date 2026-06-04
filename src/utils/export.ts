@@ -156,23 +156,17 @@ export function generateCleanExport(options: ExportOptions): string {
   // Find and hide transformer
   const transformer = stage.findOne(`.${transformerName}`) as Konva.Transformer | null;
   const transformerWasVisible = transformer?.visible();
-  if (transformer) {
-    transformer.visible(false);
-  }
+  if (transformer) transformer.visible(false);
 
-  // Hide all selection highlights
-  const selectionRects = stage.find('.selectionRect');
-  const selectionVisibility: boolean[] = [];
-  selectionRects.forEach((rect, index) => {
-    selectionVisibility[index] = rect.visible();
-    rect.visible(false);
-  });
+  // Hide the entire selection overlay layer (marquee rect lives here)
+  const selectionLayer = stage.findOne('.selectionLayer');
+  const selectionLayerWasVisible = selectionLayer?.visible();
+  if (selectionLayer) selectionLayer.visible(false);
 
   // Force redraw
   stage.batchDraw();
 
   try {
-    // Export as data URL
     const dataUrl = stage.toDataURL({
       mimeType: 'image/png',
       pixelRatio: pixelRatio,
@@ -184,19 +178,10 @@ export function generateCleanExport(options: ExportOptions): string {
 
     return dataUrl;
   } finally {
-    // Restore visibility
-    if (backgroundLayer && backgroundWasVisible) {
-      backgroundLayer.visible(true);
-    }
-    if (gridLayer && gridWasVisible) {
-      gridLayer.visible(true);
-    }
-    if (transformer && transformerWasVisible) {
-      transformer.visible(true);
-    }
-    selectionRects.forEach((rect, index) => {
-      rect.visible(selectionVisibility[index]);
-    });
+    if (backgroundLayer && backgroundWasVisible) backgroundLayer.visible(true);
+    if (gridLayer && gridWasVisible) gridLayer.visible(true);
+    if (transformer && transformerWasVisible) transformer.visible(true);
+    if (selectionLayer && selectionLayerWasVisible) selectionLayer.visible(true);
 
     stage.batchDraw();
   }
@@ -241,23 +226,16 @@ export async function exportAsPng(options: ExportOptions): Promise<void> {
   // Find and hide transformer
   const transformer = stage.findOne(`.${transformerName}`) as Konva.Transformer | null;
   const transformerWasVisible = transformer?.visible();
-  if (transformer) {
-    transformer.visible(false);
-  }
+  if (transformer) transformer.visible(false);
 
-  // Hide all selection highlights
-  const selectionRects = stage.find('.selectionRect');
-  const selectionVisibility: boolean[] = [];
-  selectionRects.forEach((rect, index) => {
-    selectionVisibility[index] = rect.visible();
-    rect.visible(false);
-  });
+  const selectionLayer = stage.findOne('.selectionLayer');
+  const selectionLayerWasVisible = selectionLayer?.visible();
+  if (selectionLayer) selectionLayer.visible(false);
 
   // Force redraw
   stage.batchDraw();
 
   try {
-    // Export with transparent background
     const dataUrl = stage.toDataURL({
       mimeType: 'image/png',
       pixelRatio: pixelRatio,
@@ -267,7 +245,6 @@ export async function exportAsPng(options: ExportOptions): Promise<void> {
       height: currentBoardDisplayHeight,
     });
 
-    // Create download link
     const link = document.createElement('a');
     link.download = `gang-sheet-${boardSize.width}x${boardSize.height}-${Date.now()}.png`;
     link.href = dataUrl;
@@ -275,19 +252,10 @@ export async function exportAsPng(options: ExportOptions): Promise<void> {
     link.click();
     document.body.removeChild(link);
   } finally {
-    // Restore visibility
-    if (backgroundLayer && backgroundWasVisible) {
-      backgroundLayer.visible(true);
-    }
-    if (gridLayer && gridWasVisible) {
-      gridLayer.visible(true);
-    }
-    if (transformer && transformerWasVisible) {
-      transformer.visible(true);
-    }
-    selectionRects.forEach((rect, index) => {
-      rect.visible(selectionVisibility[index]);
-    });
+    if (backgroundLayer && backgroundWasVisible) backgroundLayer.visible(true);
+    if (gridLayer && gridWasVisible) gridLayer.visible(true);
+    if (transformer && transformerWasVisible) transformer.visible(true);
+    if (selectionLayer && selectionLayerWasVisible) selectionLayer.visible(true);
 
     stage.batchDraw();
   }
@@ -314,6 +282,8 @@ export async function exportAsTiff(options: ExportOptions): Promise<void> {
   const transformer = stage.findOne('.transformer') as Konva.Transformer | null;
   const trWas = transformer?.visible();
   if (transformer) transformer.visible(false);
+  const selLayer = stage.findOne('.selectionLayer');
+  if (selLayer) selLayer.visible(false);
   stage.batchDraw();
 
   try {
@@ -354,6 +324,7 @@ export async function exportAsTiff(options: ExportOptions): Promise<void> {
     if (backgroundLayer && bgWas) backgroundLayer.visible(true);
     if (gridLayer && gridWas) gridLayer.visible(true);
     if (transformer && trWas) transformer.visible(true);
+    if (selLayer) selLayer.visible(true);
     stage.batchDraw();
   }
 }

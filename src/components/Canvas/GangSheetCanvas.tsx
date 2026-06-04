@@ -234,58 +234,61 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
     [selectedIds, setSelectedIds]
   );
 
-  // Handle drag end
+  // Minimum item dimension: 0.25 inches in board pixels
+  const MIN_ITEM_BOARD_PX = inchesToPx(0.25, dpi);
+
+  // Handle drag end — clamp to board bounds (best-effort for rotation=0)
   const handleDragEnd = useCallback(
     (e: Konva.KonvaEventObject<DragEvent>, itemId: string) => {
       const node = e.target;
-      // Convert display coordinates back to board coordinates
-      const newX = node.x() / displayScale;
-      const newY = node.y() / displayScale;
+      const item = items.find((i) => i.id === itemId);
+      const rawX = node.x() / displayScale;
+      const rawY = node.y() / displayScale;
 
-      updateItem(itemId, {
-        x: newX,
-        y: newY,
-      });
+      const itemW = item?.width ?? 0;
+      const itemH = item?.height ?? 0;
+      const clampedX = Math.max(0, Math.min(boardPxWidth - itemW, rawX));
+      const clampedY = Math.max(0, Math.min(boardPxHeight - itemH, rawY));
+
+      if (clampedX !== rawX || clampedY !== rawY) {
+        node.x(clampedX * displayScale);
+        node.y(clampedY * displayScale);
+      }
+
+      updateItem(itemId, { x: clampedX, y: clampedY });
     },
-    [displayScale, updateItem]
+    [displayScale, updateItem, items, boardPxWidth, boardPxHeight]
   );
 
-  // Handle transform end
+  // Handle transform end — clamp size and position to board bounds
   const handleTransformEnd = useCallback(
     (e: Konva.KonvaEventObject<Event>, itemId: string) => {
       const node = e.target as Konva.Image;
 
-      // Get the new dimensions accounting for scale
       const scaleX = node.scaleX();
       const scaleY = node.scaleY();
 
-      // Calculate new width/height in board coordinates
-      const newWidth = (node.width() * scaleX) / displayScale;
-      const newHeight = (node.height() * scaleY) / displayScale;
+      // Calculate new width/height in board coordinates, enforcing minimum
+      const newWidth = Math.max(MIN_ITEM_BOARD_PX, (node.width() * scaleX) / displayScale);
+      const newHeight = Math.max(MIN_ITEM_BOARD_PX, (node.height() * scaleY) / displayScale);
 
-      // Get new position in board coordinates
-      const newX = node.x() / displayScale;
-      const newY = node.y() / displayScale;
+      // Clamp position so item stays within board (best-effort for rotation=0)
+      const newX = Math.max(0, Math.min(boardPxWidth - newWidth, node.x() / displayScale));
+      const newY = Math.max(0, Math.min(boardPxHeight - newHeight, node.y() / displayScale));
 
-      // Get rotation
       const newRotation = node.rotation();
 
-      // Reset scale to 1 and update width/height instead
+      // Reset scale to 1 and update width/height
       node.scaleX(1);
       node.scaleY(1);
       node.width(newWidth * displayScale);
       node.height(newHeight * displayScale);
+      node.x(newX * displayScale);
+      node.y(newY * displayScale);
 
-      // Update state with board coordinates
-      updateItem(itemId, {
-        x: newX,
-        y: newY,
-        width: newWidth,
-        height: newHeight,
-        rotation: newRotation,
-      });
+      updateItem(itemId, { x: newX, y: newY, width: newWidth, height: newHeight, rotation: newRotation });
     },
-    [displayScale, updateItem]
+    [displayScale, updateItem, boardPxWidth, boardPxHeight, MIN_ITEM_BOARD_PX]
   );
 
 
@@ -356,7 +359,8 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
           ref={transformerRef}
           name="transformer"
           boundBoxFunc={(oldBox, newBox) => {
-            if (newBox.width < 10 || newBox.height < 10) return oldBox;
+            const minDisplay = MIN_ITEM_BOARD_PX * displayScale;
+            if (newBox.width < minDisplay || newBox.height < minDisplay) return oldBox;
             return newBox;
           }}
           rotateEnabled={true}
