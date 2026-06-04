@@ -118,14 +118,14 @@ export const EditorPage: React.FC = () => {
   }, []);
 
   // Load design from admin panel "Edit in Builder" action
+  // Watch currentDesign reactively so timing issues don't cause a missed load
   useEffect(() => {
-    if (currentDesign) {
-      setEditingDesign(currentDesign);
-      loadDesign(currentDesign);
-      setCurrentDesign(null);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!currentDesign) return;
+    const design = currentDesign;
+    setCurrentDesign(null); // clear first so effect doesn't re-fire
+    setEditingDesign(design);
+    loadDesign(design);
+  }, [currentDesign]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(

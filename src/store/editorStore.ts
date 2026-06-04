@@ -902,14 +902,21 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
         )
       );
 
-      set({
+      const { activeSheetId } = get();
+      set((state) => ({
         items,
         assets: loadedAssets,
         boardSize: resolvedDesign.boardSize,
         selectedIds: [],
         history: [],
         historyIndex: -1,
-      });
+        // Keep sheets in sync so multi-sheet save works correctly after edit
+        sheets: state.sheets.map((s) =>
+          s.id === activeSheetId
+            ? { ...s, items, assets: loadedAssets, boardSize: resolvedDesign.boardSize }
+            : s
+        ),
+      }));
     } catch (err) {
       console.error('Failed to load design into editor:', err);
     }
