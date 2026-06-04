@@ -116,29 +116,34 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
       return res.status(422).json({ error: 'Design missing canvasData or boardSize' });
     }
 
-    // If assetsMetadata missing or has no r2Keys, reconstruct from R2 asset files
-    const hasR2Keys = assetsMetadata && Object.values(assetsMetadata).some(m => m.r2Key);
-    if (!hasR2Keys) {
+    // Ensure all assetsMetadata entries have r2Keys — fall back to guessed R2 path if missing
+    if (assetsMetadata) {
+      for (const [assetId, meta] of Object.entries(assetsMetadata)) {
+        if (!meta.r2Key) {
+          meta.r2Key = `exports/${customerId}/${designId}/assets/${assetId}.png`;
+        }
+      }
+    } else {
+      // No assetsMetadata at all — try to reconstruct from canvasData + guessed R2 paths
       try {
         const parsedItems = JSON.parse(canvasData);
         const assetIds = [...new Set(parsedItems.map(i => i.assetId).filter(Boolean))];
         const rebuilt = {};
-        await Promise.all(assetIds.map(async (assetId) => {
-          const assetKey = `exports/${customerId}/${designId}/assets/${assetId}.png`;
-          try {
-            // Just check the object exists — GetObjectCommand will throw NoSuchKey if not
-            await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: assetKey }))
-              .then(r => r.Body.destroy()); // consume stream immediately
-            rebuilt[assetId] = { name: assetId, originalWidth: 0, originalHeight: 0, r2Key: assetKey };
-          } catch { /* asset not in R2 */ }
-        }));
+        for (const assetId of assetIds) {
+          rebuilt[assetId] = {
+            name: assetId,
+            originalWidth: 0,
+            originalHeight: 0,
+            r2Key: `exports/${customerId}/${designId}/assets/${assetId}.png`,
+          };
+        }
         if (Object.keys(rebuilt).length > 0) {
           assetsMetadata = rebuilt;
         } else {
-          return res.status(422).json({ error: 'Asset files not found in R2. Design must be re-saved in the editor.' });
+          return res.status(422).json({ error: 'Design has no items with assets.' });
         }
       } catch {
-        return res.status(422).json({ error: 'Could not reconstruct asset metadata.' });
+        return res.status(422).json({ error: 'Could not parse canvasData.' });
       }
     }
 
