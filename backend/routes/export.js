@@ -111,14 +111,35 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
     }));
     const design = JSON.parse((await streamToBuffer(designRes.Body)).toString('utf-8'));
 
-    const { canvasData, assetsMetadata, boardSize } = design;
+    let { canvasData, assetsMetadata, boardSize } = design;
     if (!canvasData || !boardSize) {
       return res.status(422).json({ error: 'Design missing canvasData or boardSize' });
     }
-    if (!assetsMetadata || Object.keys(assetsMetadata).length === 0) {
-      return res.status(422).json({
-        error: 'Design has no R2 asset keys. Open the design in the editor and re-save it to upload assets to cloud first.',
-      });
+
+    // If assetsMetadata missing or has no r2Keys, reconstruct from R2 asset files
+    const hasR2Keys = assetsMetadata && Object.values(assetsMetadata).some(m => m.r2Key);
+    if (!hasR2Keys) {
+      try {
+        const parsedItems = JSON.parse(canvasData);
+        const assetIds = [...new Set(parsedItems.map(i => i.assetId).filter(Boolean))];
+        const rebuilt = {};
+        await Promise.all(assetIds.map(async (assetId) => {
+          const assetKey = `exports/${customerId}/${designId}/assets/${assetId}.png`;
+          try {
+            // Just check the object exists — GetObjectCommand will throw NoSuchKey if not
+            await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: assetKey }))
+              .then(r => r.Body.destroy()); // consume stream immediately
+            rebuilt[assetId] = { name: assetId, originalWidth: 0, originalHeight: 0, r2Key: assetKey };
+          } catch { /* asset not in R2 */ }
+        }));
+        if (Object.keys(rebuilt).length > 0) {
+          assetsMetadata = rebuilt;
+        } else {
+          return res.status(422).json({ error: 'Asset files not found in R2. Design must be re-saved in the editor.' });
+        }
+      } catch {
+        return res.status(422).json({ error: 'Could not reconstruct asset metadata.' });
+      }
     }
 
     const items = JSON.parse(canvasData);
