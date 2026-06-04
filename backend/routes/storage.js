@@ -176,7 +176,47 @@ router.get('/designs/:designId', async (req, res) => {
     }));
 
     const bodyContents = await streamToString(response.Body);
-    res.json({ design: JSON.parse(bodyContents) });
+    const design = JSON.parse(bodyContents);
+
+    // Refresh assetsMetadata viewUrls so they are always valid when editor loads
+    if (design.assetsMetadata && typeof design.assetsMetadata === 'object') {
+      await Promise.all(Object.entries(design.assetsMetadata).map(async ([, meta]) => {
+        if (meta && meta.r2Key) {
+          try {
+            meta.viewUrl = await getSignedUrl(
+              s3Client,
+              new GetObjectCommand({ Bucket: BUCKET_NAME, Key: meta.r2Key }),
+              { expiresIn: 86400 }
+            );
+          } catch { /* skip missing asset */ }
+        }
+      }));
+    }
+
+    // If assetsMetadata is missing but canvasData is present, reconstruct from R2 asset files
+    if (!design.assetsMetadata && design.canvasData) {
+      try {
+        const items = JSON.parse(design.canvasData);
+        const assetIds = [...new Set(items.map(i => i.assetId).filter(Boolean))];
+        if (assetIds.length > 0) {
+          const assetsMetadata = {};
+          await Promise.all(assetIds.map(async (assetId) => {
+            const assetKey = `exports/${customerId}/${designId}/assets/${assetId}.png`;
+            try {
+              const viewUrl = await getSignedUrl(
+                s3Client,
+                new GetObjectCommand({ Bucket: BUCKET_NAME, Key: assetKey }),
+                { expiresIn: 86400 }
+              );
+              assetsMetadata[assetId] = { name: assetId, originalWidth: 0, originalHeight: 0, r2Key: assetKey, viewUrl };
+            } catch { /* asset file not in R2 */ }
+          }));
+          if (Object.keys(assetsMetadata).length > 0) design.assetsMetadata = assetsMetadata;
+        }
+      } catch { /* ignore canvasData parse errors */ }
+    }
+
+    res.json({ design });
   } catch (error) {
     if (error.name === 'NoSuchKey') {
       return res.status(404).json({ error: 'Design not found' });

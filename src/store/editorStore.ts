@@ -851,13 +851,12 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
         } catch { /* ignore */ }
       }
 
-      // Fetch full design from R2 if canvasData or assetsMetadata is missing.
-      // Pass design.customerId so admin-mode edits fetch the correct customer's data,
-      // not the admin's own designs.
+      // Always fetch fresh from cloud when editing another customer's design (admin mode),
+      // identified by design.customerId being present. Also fetch when local data is incomplete.
+      const ownerCustomerId = (design as any).customerId as string | undefined;
       let resolvedDesign = designWithAssets;
-      if (!designWithAssets.canvasData || (!(designWithAssets as any).assetsMetadata && !designWithAssets.assetsData)) {
+      if (ownerCustomerId || !designWithAssets.canvasData || (!(designWithAssets as any).assetsMetadata && !designWithAssets.assetsData)) {
         try {
-          const ownerCustomerId = (design as any).customerId as string | undefined;
           const cloudDesign = await getDesignFromCloud(design.id, ownerCustomerId);
           if (cloudDesign) {
             resolvedDesign = {
