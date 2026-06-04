@@ -220,18 +220,33 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
       }
     }
 
-    // If nothing rendered, return error with diagnostics instead of blank TIFF
+    // If nothing rendered, fall back to full-export.png stored in R2
     if (renderedCount === 0) {
-      return res.status(422).json({
-        error: 'Hiçbir görsel render edilemedi — asset dosyaları R2\'de bulunamadı.',
-        diagnostics: {
-          customerId,
-          designId,
-          itemCount: sorted.length,
-          skipped: skippedReasons,
-          assetsMetadataKeys: assetsMetadata ? Object.keys(assetsMetadata) : [],
-        },
-      });
+      console.warn(`[export] All ${sorted.length} items skipped. Trying full-export.png fallback.`);
+      const fullExportKey = `exports/${customerId}/${designId}/full-export.png`;
+      try {
+        const fullBuf = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: fullExportKey }))
+          .then(r => streamToBuffer(r.Body));
+        // Resize to target DPI dimensions and convert to TIFF
+        const { data: fallbackData, info } = await sharp(fullBuf)
+          .resize(boardPxW, boardPxH, { fit: 'fill' })
+          .flatten({ background: { r: 255, g: 255, b: 255 } })
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+        const tiffBuf = writeTiff(fallbackData, info.width, info.height, dpi);
+        const filename = `${design.name || designId}_${boardW}x${boardH}_${dpi}dpi_fallback.tiff`
+          .replace(/[^a-zA-Z0-9._\-x]/g, '_');
+        res.setHeader('Content-Type', 'image/tiff');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('X-Render-DPI', String(dpi));
+        res.setHeader('Content-Length', String(tiffBuf.length));
+        return res.send(tiffBuf);
+      } catch (fallbackErr) {
+        return res.status(422).json({
+          error: 'Asset dosyaları ve full-export.png R2\'de bulunamadı. Tasarımı editörde açıp tekrar kaydet.',
+          diagnostics: { customerId, designId, skipped: skippedReasons },
+        });
+      }
     }
 
     if (skippedReasons.length > 0) {
