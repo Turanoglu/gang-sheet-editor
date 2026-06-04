@@ -864,13 +864,15 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
 
       // If assetsData is empty but assetsMetadata exists (cloud format), build rawAssets from it
       if ((!resolvedDesign.assetsData || Object.keys(rawAssets).length === 0) && (resolvedDesign as any).assetsMetadata) {
-        for (const [id, meta] of Object.entries((resolvedDesign as any).assetsMetadata as Record<string, { name: string; originalWidth: number; originalHeight: number; viewUrl: string }>)) {
+        for (const [id, meta] of Object.entries((resolvedDesign as any).assetsMetadata as Record<string, { name: string; originalWidth: number; originalHeight: number; viewUrl: string; r2Key?: string }>)) {
           rawAssets[id] = {
             id,
             name: meta.name,
             originalWidth: meta.originalWidth,
             originalHeight: meta.originalHeight,
             dataUrl: meta.viewUrl || '',
+            // Preserve r2Key so that when the design is re-saved, upload is skipped and r2Key stays intact
+            ...(meta.r2Key && { r2Key: meta.r2Key }),
             imageEl: new window.Image(),
           };
         }

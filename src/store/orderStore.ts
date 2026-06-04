@@ -261,13 +261,28 @@ export const useOrderStore = create<ExtendedOrderStore>()(
             }
           }
 
-          // Upload each asset's dataUrl to R2 and build assetsMetadata
+          // Upload each asset to R2 and build assetsMetadata with r2Keys
           if (design.assetsData) {
             try {
-              const rawAssets: Record<string, { id: string; name: string; originalWidth: number; originalHeight: number; dataUrl: string }> = JSON.parse(design.assetsData);
+              const rawAssets: Record<string, { id: string; name: string; originalWidth: number; originalHeight: number; dataUrl: string; r2Key?: string }> = JSON.parse(design.assetsData);
+              // Preserve any existing assetsMetadata (already has r2Keys from previous saves)
+              const existingMeta: Record<string, any> = (cloudDesign as any).assetsMetadata || {};
               const assetsMetadata: Record<string, { name: string; originalWidth: number; originalHeight: number; r2Key: string; viewUrl: string }> = {};
               await Promise.all(
                 Object.entries(rawAssets).map(async ([assetId, asset]) => {
+                  // If this asset already has a valid r2Key (from existingMeta or from asset itself), reuse it
+                  const existingR2Key = existingMeta[assetId]?.r2Key || asset.r2Key;
+                  if (existingR2Key) {
+                    assetsMetadata[assetId] = {
+                      name: asset.name,
+                      originalWidth: asset.originalWidth,
+                      originalHeight: asset.originalHeight,
+                      r2Key: existingR2Key,
+                      viewUrl: existingMeta[assetId]?.viewUrl || asset.dataUrl,
+                    };
+                    return;
+                  }
+                  // Only upload if we have actual image data (base64)
                   if (asset.dataUrl && asset.dataUrl.startsWith('data:')) {
                     try {
                       const result = await uploadImageToCloud(design.id, asset.dataUrl, 'asset', 'image/png', assetId);
@@ -282,6 +297,8 @@ export const useOrderStore = create<ExtendedOrderStore>()(
                       console.warn(`Failed to upload asset ${assetId}:`, err);
                     }
                   }
+                  // If dataUrl is an http URL (cloud-loaded asset) but has no r2Key,
+                  // the reconstruct logic in render-tiff will handle it from R2 directly.
                 })
               );
               if (Object.keys(assetsMetadata).length > 0) {

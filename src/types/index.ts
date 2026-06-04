@@ -58,6 +58,7 @@ export interface Asset {
   originalHeight: number;
   imageEl: HTMLImageElement;
   dataUrl: string;
+  r2Key?: string; // R2 storage key — preserved when loaded from cloud so re-save skips re-upload
 }
 
 // Canvas item representing an image on the board
