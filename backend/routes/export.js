@@ -166,11 +166,13 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
     }).png().toBuffer();
 
     // Composite items one at a time to keep peak memory low
-    // (avoids holding all layer buffers simultaneously)
+    let renderedCount = 0;
+    const skippedReasons = [];
+
     for (const item of sorted) {
       const meta = assetsMetadata[item.assetId];
       if (!meta?.r2Key) {
-        console.warn(`[export] No R2 key for asset ${item.assetId} — skipping`);
+        skippedReasons.push(`item ${item.id}: no r2Key for assetId ${item.assetId}`);
         continue;
       }
 
@@ -212,9 +214,28 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
           .png()
           .toBuffer();
 
+        renderedCount++;
       } catch (err) {
-        console.warn(`[export] Skipping item ${item.id}:`, err.message);
+        skippedReasons.push(`item ${item.id}: ${err.message} (r2Key: ${meta.r2Key})`);
       }
+    }
+
+    // If nothing rendered, return error with diagnostics instead of blank TIFF
+    if (renderedCount === 0) {
+      return res.status(422).json({
+        error: 'Hiçbir görsel render edilemedi — asset dosyaları R2\'de bulunamadı.',
+        diagnostics: {
+          customerId,
+          designId,
+          itemCount: sorted.length,
+          skipped: skippedReasons,
+          assetsMetadataKeys: assetsMetadata ? Object.keys(assetsMetadata) : [],
+        },
+      });
+    }
+
+    if (skippedReasons.length > 0) {
+      console.warn(`[export] ${skippedReasons.length} item(s) skipped:`, skippedReasons);
     }
 
     // Final: extract raw RGBA for TIFF encoding

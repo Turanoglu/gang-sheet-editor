@@ -622,8 +622,13 @@ export const AdminPanel: React.FC = () => {
 
         const errBody = await renderRes.json().catch(() => ({ error: `HTTP ${renderRes.status}` }));
         const msg = errBody.error || `HTTP ${renderRes.status}`;
+        if (errBody.diagnostics) {
+          console.error('[TIFF diagnostics]', JSON.stringify(errBody.diagnostics, null, 2));
+        }
         if (renderRes.status === 503 || msg.toLowerCase().includes('memory')) {
           alert(`⚠️ Sunucu bu boyut için yeterli RAM'e sahip değil.\n\nÇözüm: Render.com Starter ($7/ay) planına geç.`);
+        } else if (errBody.diagnostics) {
+          alert(`❌ ${msg}\n\nTarayıcı Console'unu aç (F12) ve "[TIFF diagnostics]" satırını kopyalayıp paylaş.`);
         } else {
           alert(`❌ TIFF render başarısız: ${msg}`);
         }
