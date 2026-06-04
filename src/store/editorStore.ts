@@ -842,13 +842,28 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
 
   loadDesign: async (design) => {
     try {
-      // If canvasData is missing, fetch the full design from R2 (may have canvasData for newer designs)
-      let resolvedDesign = design;
-      if (!design.canvasData) {
+      // Restore assetsData from sessionStorage cache if cloud sync wiped it from memory
+      let designWithAssets = design;
+      if (!design.assetsData && !(design as any).assetsMetadata) {
+        try {
+          const cached = sessionStorage.getItem(`gs-assets-${design.id}`);
+          if (cached) designWithAssets = { ...design, assetsData: cached };
+        } catch { /* ignore */ }
+      }
+
+      // Fetch full design from R2 if canvasData or assetsMetadata is missing
+      let resolvedDesign = designWithAssets;
+      if (!designWithAssets.canvasData || (!(designWithAssets as any).assetsMetadata && !designWithAssets.assetsData)) {
         try {
           const cloudDesign = await getDesignFromCloud(design.id);
-          if (cloudDesign?.canvasData) resolvedDesign = { ...design, ...cloudDesign };
-        } catch { /* use local design as fallback */ }
+          if (cloudDesign) {
+            resolvedDesign = {
+              ...designWithAssets,
+              ...(cloudDesign.canvasData && { canvasData: cloudDesign.canvasData }),
+              ...((cloudDesign as any).assetsMetadata && { assetsMetadata: (cloudDesign as any).assetsMetadata }),
+            };
+          }
+        } catch { /* use local as fallback */ }
       }
 
       const items: import('../types').CanvasItem[] = resolvedDesign.canvasData

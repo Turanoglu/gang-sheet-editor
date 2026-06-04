@@ -231,6 +231,13 @@ export const useOrderStore = create<ExtendedOrderStore>()(
           return { designs: newDesigns };
         });
 
+        // Cache assetsData in sessionStorage so loadFromCloud cloud-sync can't wipe it
+        if (design.assetsData) {
+          try {
+            sessionStorage.setItem(`gs-assets-${design.id}`, design.assetsData);
+          } catch { /* sessionStorage quota — not critical */ }
+        }
+
         // Sync to cloud in background
         try {
           // Upload images to R2 if they exist
