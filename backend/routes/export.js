@@ -223,10 +223,22 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
     // If nothing rendered, fall back to full-export.png stored in R2
     if (renderedCount === 0) {
       console.warn(`[export] All ${sorted.length} items skipped. Trying full-export.png fallback.`);
-      const fullExportKey = `exports/${customerId}/${designId}/full-export.png`;
+      // Try full-export.png first, then thumbnail.png as last resort
+      const fallbackKeys = [
+        `exports/${customerId}/${designId}/full-export.png`,
+        `exports/${customerId}/${designId}/thumbnail.png`,
+      ];
+      let fullBuf = null;
+      for (const key of fallbackKeys) {
+        try {
+          fullBuf = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key }))
+            .then(r => streamToBuffer(r.Body));
+          console.log(`[export] Using fallback: ${key}`);
+          break;
+        } catch { /* try next */ }
+      }
       try {
-        const fullBuf = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: fullExportKey }))
-          .then(r => streamToBuffer(r.Body));
+        if (!fullBuf) throw new Error('no fallback found');
         // Resize to target DPI dimensions and convert to TIFF
         const { data: fallbackData, info } = await sharp(fullBuf)
           .resize(boardPxW, boardPxH, { fit: 'fill' })
