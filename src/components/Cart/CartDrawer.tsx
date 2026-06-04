@@ -13,6 +13,25 @@ const isEmbedded = (): boolean => {
   }
 };
 
+// Allowed parent origins for postMessage — restrict to known Shopify store domains
+const ALLOWED_PARENT_ORIGINS: string[] = [
+  'https://www.inkdyno.com',
+  'https://inkdyno.com',
+  'https://n9e1pw-qr.myshopify.com',
+];
+
+const getParentOrigin = (): string => {
+  try {
+    const ref = document.referrer;
+    if (ref) {
+      const url = new URL(ref);
+      const match = ALLOWED_PARENT_ORIGINS.find((o) => o === url.origin);
+      if (match) return match;
+    }
+  } catch { /* ignore */ }
+  return ALLOWED_PARENT_ORIGINS[0]; // default to primary store
+};
+
 export const CartDrawer: React.FC = () => {
   const { items, isOpen, closeCart, removeFromCart, updateQuantity, getTotal, clearCart } = useCartStore();
   const { createOrder, updateOrderStatus } = useOrderStore();
@@ -24,7 +43,7 @@ export const CartDrawer: React.FC = () => {
 
     // If embedded in Shopify and customer not logged in, request login via parent
     if (isEmbedded() && areVariantsConfigured() && !getCustomerId()) {
-      window.parent.postMessage({ type: 'gang-sheet-login-required' }, '*');
+      window.parent.postMessage({ type: 'gang-sheet-login-required' }, getParentOrigin());
       return;
     }
 
@@ -80,7 +99,7 @@ export const CartDrawer: React.FC = () => {
         window.parent.postMessage({
           type: 'gang-sheet-checkout',
           items: lineItems,
-        }, '*');
+        }, getParentOrigin());
 
         // Clear local state after message is queued
         clearCart();

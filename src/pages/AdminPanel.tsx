@@ -743,7 +743,11 @@ export const AdminPanel: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs
                            focus:outline-none focus:ring-2 focus:ring-purple-500 mb-2"
               />
-              {adminLoginError && <p className="text-xs text-red-600 mb-2">{adminLoginError}</p>}
+              {adminLoginError && (
+                <p className={`text-xs mb-2 ${adminLoginError.includes('uyanıyor') ? 'text-amber-600' : 'text-red-600'}`}>
+                  {adminLoginError}
+                </p>
+              )}
               <button
                 onClick={handleAdminLogin}
                 disabled={adminLoading || !adminKeyInput.trim()}
@@ -787,7 +791,9 @@ export const AdminPanel: React.FC = () => {
                          focus:outline-none focus:ring-2 focus:ring-purple-500 mb-2"
             />
             {adminLoginError && (
-              <p className="text-sm text-red-600 mb-2">{adminLoginError}</p>
+              <p className={`text-sm mb-2 ${adminLoginError.includes('uyanıyor') ? 'text-amber-600' : 'text-red-600'}`}>
+                {adminLoginError}
+              </p>
             )}
             <div className="flex gap-2 mt-2">
               <button

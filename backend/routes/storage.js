@@ -667,13 +667,28 @@ router.delete('/admin/orders/:customerId/:orderId', requireAdminKey, async (req,
   }
 });
 
-// Admin: delete any customer's design
+// Admin: delete any customer's design (JSON + all R2 export/asset files)
 router.delete('/admin/designs/:customerId/:designId', requireAdminKey, async (req, res) => {
   try {
     const { customerId, designId } = req.params;
-    const key = `users/${customerId}/designs/${designId}.json`;
-    await s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: key }));
-    res.json({ success: true, designId });
+    const designKey = `users/${customerId}/designs/${designId}.json`;
+    const exportsPrefix = `exports/${customerId}/${designId}/`;
+
+    // List all export/asset files for this design
+    const listResp = await s3Client.send(new ListObjectsV2Command({
+      Bucket: BUCKET_NAME,
+      Prefix: exportsPrefix,
+    }));
+
+    // Delete all export/asset files
+    const deletePromises = (listResp.Contents || []).map((obj) =>
+      s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: obj.Key }))
+    );
+    // Delete design JSON
+    deletePromises.push(s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: designKey })));
+
+    await Promise.all(deletePromises);
+    res.json({ success: true, designId, deletedAssets: (listResp.Contents || []).length });
   } catch (error) {
     console.error('Error deleting design (admin):', error);
     res.status(500).json({ error: 'Failed to delete design', message: error.message });

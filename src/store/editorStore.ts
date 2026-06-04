@@ -640,11 +640,12 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     const boardWidth = getBoardPxWidth();
     const boardHeight = getBoardPxHeight();
 
-    // Find bounding box of selection
-    const minX = Math.min(...selectedItems.map((i) => i.x));
-    const maxX = Math.max(...selectedItems.map((i) => i.x + i.width));
-    const minY = Math.min(...selectedItems.map((i) => i.y));
-    const maxY = Math.max(...selectedItems.map((i) => i.y + i.height));
+    // Find bounding box of selection using AABB (handles rotation correctly)
+    const aabbs = selectedItems.map(getAABB);
+    const minX = Math.min(...aabbs.map((b) => b.left));
+    const maxX = Math.max(...aabbs.map((b) => b.right));
+    const minY = Math.min(...aabbs.map((b) => b.top));
+    const maxY = Math.max(...aabbs.map((b) => b.bottom));
     const selectionWidth = maxX - minX;
     const selectionHeight = maxY - minY;
 
@@ -675,11 +676,8 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     set((state) => ({
       items: state.items.map((item) => {
         if (selectedIds.includes(item.id)) {
-          return {
-            ...item,
-            x: item.x + offsetX,
-            y: item.y + offsetY,
-          };
+          // Move the item's top-left (x, y) by the offset so the AABB shifts correctly
+          return { ...item, x: item.x + offsetX, y: item.y + offsetY };
         }
         return item;
       }),
@@ -693,19 +691,8 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     const boardHeight = getBoardPxHeight();
 
     const hasOverflow = items.some((item) => {
-      // Account for rotation (simplified - just check basic bounds)
-      const rad = (item.rotation * Math.PI) / 180;
-      const cos = Math.abs(Math.cos(rad));
-      const sin = Math.abs(Math.sin(rad));
-      const rotatedWidth = item.width * cos + item.height * sin;
-      const rotatedHeight = item.width * sin + item.height * cos;
-
-      return (
-        item.x < 0 ||
-        item.y < 0 ||
-        item.x + rotatedWidth > boardWidth ||
-        item.y + rotatedHeight > boardHeight
-      );
+      const { left, top, right, bottom } = getAABB(item);
+      return left < 0 || top < 0 || right > boardWidth || bottom > boardHeight;
     });
 
     set({ hasOverflow });
@@ -898,7 +885,7 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
             new Promise<void>((resolve) => {
               const img = new window.Image();
               img.onload = () => { loadedAssets[id] = { ...raw, imageEl: img }; resolve(); };
-              img.onerror = () => { loadedAssets[id] = { ...raw, imageEl: img }; resolve(); };
+              img.onerror = () => { console.warn(`[loadDesign] Failed to load asset image: ${id} (url may be expired)`); loadedAssets[id] = { ...raw, imageEl: img }; resolve(); };
               img.src = raw.dataUrl;
             })
         )
