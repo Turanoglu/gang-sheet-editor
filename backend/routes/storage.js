@@ -470,9 +470,10 @@ router.post('/upload-image', async (req, res) => {
 // ==================== ADMIN ENDPOINTS ====================
 
 // Strip heavy fields not needed by admin UI.
-// Keep items but remove base64 blobs inside each item's design.
+// canvasData is kept — it's plain JSON (positions/sizes), not base64. Editor needs it.
+// Only assetsData (base64 image blobs) is stripped.
 const stripHeavyFields = (obj) => {
-  const { canvasData, assetsData, ...light } = obj;
+  const { assetsData, ...light } = obj;
   if (Array.isArray(light.items)) {
     light.items = light.items.map(item => {
       if (!item || !item.design) return item;
@@ -557,6 +558,20 @@ router.get('/admin/designs', requireAdminKey, async (req, res) => {
             { expiresIn: 86400 }
           );
         } catch { /* keep existing */ }
+        // Refresh assetsMetadata viewUrls so Edit in Builder can load images
+        if (parsed.assetsMetadata && typeof parsed.assetsMetadata === 'object') {
+          await Promise.all(Object.entries(parsed.assetsMetadata).map(async ([, meta]) => {
+            if (meta && meta.r2Key) {
+              try {
+                meta.viewUrl = await getSignedUrl(
+                  s3Client,
+                  new GetObjectCommand({ Bucket: BUCKET_NAME, Key: meta.r2Key }),
+                  { expiresIn: 86400 }
+                );
+              } catch { /* skip */ }
+            }
+          }));
+        }
         if (itemBelongsToShop(parsed, shopDomain)) designs.push(parsed);
       } catch (e) {
         console.error('Error reading design:', obj.Key, e.message);
