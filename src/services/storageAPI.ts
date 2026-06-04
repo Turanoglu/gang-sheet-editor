@@ -180,9 +180,17 @@ export async function getDesignsFromCloud(): Promise<GangSheetDesign[]> {
   }
 }
 
-export async function getDesignFromCloud(designId: string): Promise<GangSheetDesign | null> {
+export async function getDesignFromCloud(designId: string, overrideCustomerId?: string): Promise<GangSheetDesign | null> {
   try {
-    const response = await fetchWithAuth(`${API_BASE_URL}/api/storage/designs/${designId}`);
+    const url = `${API_BASE_URL}/api/storage/designs/${designId}`;
+    const response = await (overrideCustomerId
+      ? fetch(url, {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Shopify-Customer-Id': overrideCustomerId,
+          },
+        })
+      : fetchWithAuth(url));
 
     if (response.status === 404) {
       return null;
