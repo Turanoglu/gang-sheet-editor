@@ -568,24 +568,56 @@ export const AdminPanel: React.FC = () => {
 
     const baseName = `${design.name.replace(/\s+/g, '_')}_${design.boardSize.width}x${design.boardSize.height}`;
     const apiBase = import.meta.env.VITE_BACKEND_URL || 'https://gang-sheet-backend.onrender.com';
-    const proxyUrl = `${apiBase}/api/storage/proxy-image?customerId=${encodeURIComponent(design.customerId)}&designId=${encodeURIComponent(design.id)}`;
-
-    const res = await fetch(proxyUrl, { headers: { 'X-Admin-Key': adminKey! } });
-    if (!res.ok) { alert(`Görsel bulunamadı (${res.status})`); return; }
-
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
 
     if (format === 'tiff') {
-      await downloadAsTiff(blobUrl, `${baseName}.tiff`);
-    } else {
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = `${baseName}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Server-side render: composites assets at the highest safe DPI (up to 300)
+      try {
+        const renderRes = await fetch(`${apiBase}/api/export/render-tiff`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey! },
+          body: JSON.stringify({ customerId: design.customerId, designId: design.id }),
+        });
+
+        if (renderRes.ok) {
+          const dpi = renderRes.headers.get('X-Render-DPI') || '300';
+          const blob = await renderRes.blob();
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `${baseName}_${dpi}dpi.tiff`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+          return;
+        }
+        // Server render failed — fall through to client-side fallback
+        console.warn('[admin] Server render failed, falling back to client-side TIFF', await renderRes.text());
+      } catch (err) {
+        console.warn('[admin] Server render error, falling back to client-side TIFF', err);
+      }
+
+      // Fallback: fetch stored PNG from R2 and convert client-side at actual DPI
+      const proxyUrl = `${apiBase}/api/storage/proxy-image?customerId=${encodeURIComponent(design.customerId)}&designId=${encodeURIComponent(design.id)}`;
+      const proxyRes = await fetch(proxyUrl, { headers: { 'X-Admin-Key': adminKey! } });
+      if (!proxyRes.ok) { alert(`Görsel bulunamadı (${proxyRes.status})`); return; }
+      const blobUrl = URL.createObjectURL(await proxyRes.blob());
+      await downloadAsTiff(blobUrl, `${baseName}_fallback.tiff`, design.boardSize.width);
+      URL.revokeObjectURL(blobUrl);
+      return;
     }
+
+    // PNG download
+    const proxyUrl = `${apiBase}/api/storage/proxy-image?customerId=${encodeURIComponent(design.customerId)}&designId=${encodeURIComponent(design.id)}`;
+    const res = await fetch(proxyUrl, { headers: { 'X-Admin-Key': adminKey! } });
+    if (!res.ok) { alert(`Görsel bulunamadı (${res.status})`); return; }
+    const blobUrl = URL.createObjectURL(await res.blob());
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = `${baseName}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     URL.revokeObjectURL(blobUrl);
   };
 

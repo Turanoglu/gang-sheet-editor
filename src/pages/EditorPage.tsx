@@ -59,16 +59,24 @@ export const EditorPage: React.FC = () => {
   const zoomLevelRef = useRef(zoomLevel);
   useEffect(() => { zoomLevelRef.current = zoomLevel; }, [zoomLevel]);
 
+  // Per-sheet print-quality exports stored in memory (not persisted — too large for localStorage)
+  const sheetPrintExports = useRef<Map<string, string>>(new Map());
+
   // Capture thumbnail of current sheet then switch / add
   const handleSwitchSheet = useCallback((id: string) => {
     const thumb = generateThumbnail('tiny');
+    // Save print-quality export for the sheet we're leaving so it's available at cart time
+    const printExport = generateThumbnail('print');
+    if (printExport) sheetPrintExports.current.set(activeSheetId, printExport);
     switchSheet(id, thumb || undefined);
-  }, [switchSheet]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [switchSheet, activeSheetId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAddSheet = useCallback(() => {
     const thumb = generateThumbnail('tiny');
+    const printExport = generateThumbnail('print');
+    if (printExport) sheetPrintExports.current.set(activeSheetId, printExport);
     addSheet(thumb || undefined);
-  }, [addSheet]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [addSheet, activeSheetId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { addToCart, clearCart, getItemCount, openCart } = useCartStore();
   const { saveDesign, createOrder, currentDesign, setCurrentDesign } = useOrderStore();
@@ -305,7 +313,11 @@ export const EditorPage: React.FC = () => {
       // Only the active sheet can have a freshly rendered export;
       // other sheets use the tiny thumbnail saved when the user last switched away.
       const thumbnailUrl = isActive ? generateThumbnail('thumbnail') : (s.thumbnailUrl || '');
-      const fullExportUrl = isActive ? generateThumbnail('print') : (s.thumbnailUrl || '');
+      // Non-active sheets: use the print export saved when the user switched away.
+      // Falls back to tiny thumbnail only if user never switched (single-sheet flow).
+      const fullExportUrl = isActive
+        ? generateThumbnail('print')
+        : (sheetPrintExports.current.get(s.id) || s.thumbnailUrl || '');
 
       const sheetName = nonEmptySheets.length === 1
         ? baseName

@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const storageRoutes = require('./routes/storage');
+const exportRoutes  = require('./routes/export');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,6 +39,7 @@ app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
 // Routes
 app.use('/api/storage', storageRoutes);
+app.use('/api/export', exportRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

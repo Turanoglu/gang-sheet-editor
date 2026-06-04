@@ -361,8 +361,12 @@ export async function exportAsTiff(options: ExportOptions): Promise<void> {
 /**
  * Convert a PNG dataUrl to TIFF and download
  */
-export async function downloadAsTiff(dataUrl: string, filename: string): Promise<void> {
-  // Fetch as blob first to avoid tainted canvas CORS issues with presigned R2 URLs
+/**
+ * Convert a PNG dataUrl to TIFF and download.
+ * boardWidthInches: if provided, the TIFF DPI metadata is calculated from actual pixel density
+ * rather than hardcoded — avoids lying to RIP software.
+ */
+export async function downloadAsTiff(dataUrl: string, filename: string, boardWidthInches?: number): Promise<void> {
   const fetchedBlob = await fetch(dataUrl).then(r => r.blob());
   const blobUrl = URL.createObjectURL(fetchedBlob);
   const img = new Image();
@@ -374,13 +378,17 @@ export async function downloadAsTiff(dataUrl: string, filename: string): Promise
   canvas.width = w;
   canvas.height = h;
   const ctx = canvas.getContext('2d')!;
-  // White background — DTF production standard (no transparency in print files)
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, w, h);
   ctx.drawImage(img, 0, 0);
   const imageData = ctx.getImageData(0, 0, w, h);
 
-  const tiffBuffer = writeTiff(imageData.data, w, h, 300);
+  // Calculate actual DPI from pixel density so TIFF metadata is accurate
+  const actualDpi = boardWidthInches && boardWidthInches > 0
+    ? Math.round(w / boardWidthInches)
+    : 150;
+
+  const tiffBuffer = writeTiff(imageData.data, w, h, actualDpi);
   const blob = new Blob([tiffBuffer], { type: 'image/tiff' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
