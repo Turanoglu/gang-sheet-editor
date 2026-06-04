@@ -561,6 +561,25 @@ export const AdminPanel: React.FC = () => {
     }
   };
 
+  // Wake backend from Render.com sleep, with progress updates
+  const wakeBackend = async (apiBase: string, onStatus: (msg: string) => void): Promise<boolean> => {
+    const TIMEOUT = 70000; // Render cold start can take up to 60s
+    const INTERVAL = 3000;
+    const deadline = Date.now() + TIMEOUT;
+    let attempt = 0;
+    while (Date.now() < deadline) {
+      try {
+        const res = await fetch(`${apiBase}/health`, { signal: AbortSignal.timeout(5000) });
+        if (res.ok) return true;
+      } catch { /* sleeping */ }
+      attempt++;
+      const remaining = Math.ceil((deadline - Date.now()) / 1000);
+      onStatus(`Sunucu uyandırılıyor... (${attempt * 3}s / maks 70s kaldı: ${remaining}s)`);
+      await new Promise(r => setTimeout(r, INTERVAL));
+    }
+    return false;
+  };
+
   // Download design as PNG or TIFF
   const handleDownloadDesign = async (design: GangSheetDesign, format: 'png' | 'tiff' = 'png') => {
     const adminKey = localStorage.getItem('gang-sheet-admin-key');
@@ -572,6 +591,15 @@ export const AdminPanel: React.FC = () => {
     if (format === 'tiff') {
       setTiffDownloading(design.id);
       try {
+        // Step 1: ensure backend is awake
+        const awake = await wakeBackend(apiBase, (msg) => setTiffDownloading(`${design.id}:${msg}`));
+        if (!awake) {
+          alert('❌ Sunucu 70 saniye içinde yanıt vermedi. Render.com dashboard\'dan servisi kontrol et.');
+          return;
+        }
+
+        // Step 2: render TIFF
+        setTiffDownloading(design.id);
         const renderRes = await fetch(`${apiBase}/api/export/render-tiff`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey! },
@@ -592,23 +620,15 @@ export const AdminPanel: React.FC = () => {
           return;
         }
 
-        // Server returned an error — show it, do NOT silently fall back to low-quality
         const errBody = await renderRes.json().catch(() => ({ error: `HTTP ${renderRes.status}` }));
         const msg = errBody.error || `HTTP ${renderRes.status}`;
-        if (renderRes.status === 422 && msg.includes('re-save')) {
-          alert(`⚠️ Bu tasarım eski formatta kaydedilmiş.\n\nÇözüm: Müşteriyle iletişime geç, tasarımı editörde açıp tekrar kaydetmesini iste. Sonra tekrar dene.`);
-        } else if (renderRes.status === 503 || msg.toLowerCase().includes('memory')) {
-          alert(`⚠️ Sunucu bu boyut için yeterli RAM'e sahip değil.\n\nÇözüm: Render.com Starter ($7/ay) planına geç veya tasarım boyutunu küçült.`);
+        if (renderRes.status === 503 || msg.toLowerCase().includes('memory')) {
+          alert(`⚠️ Sunucu bu boyut için yeterli RAM'e sahip değil.\n\nÇözüm: Render.com Starter ($7/ay) planına geç.`);
         } else {
           alert(`❌ TIFF render başarısız: ${msg}`);
         }
       } catch (err) {
-        const isNetwork = err instanceof TypeError && err.message.includes('fetch');
-        if (isNetwork) {
-          alert('❌ Backend\'e ulaşılamıyor. Render.com dashboard\'dan servisi uyandır ve tekrar dene.');
-        } else {
-          alert(`❌ TIFF indirme hatası: ${err instanceof Error ? err.message : err}`);
-        }
+        alert(`❌ TIFF indirme hatası: ${err instanceof Error ? err.message : err}`);
       } finally {
         setTiffDownloading(null);
       }
@@ -1184,7 +1204,8 @@ export const AdminPanel: React.FC = () => {
                           onEditInBuilder={() => handleEditDesign(design)}
                           onDownload={() => handleDownloadDesign(design, 'png')}
                           onDownloadTiff={() => handleDownloadDesign(design, 'tiff')}
-                          isTiffDownloading={tiffDownloading === design.id}
+                          isTiffDownloading={tiffDownloading !== null && tiffDownloading.startsWith(design.id)}
+                          tiffStatus={tiffDownloading?.startsWith(`${design.id}:`) ? tiffDownloading.slice(design.id.length + 1) : undefined}
                           onDelete={() => handleDeleteDesign(design)}
                           formatDate={formatDate}
                         />
@@ -1290,9 +1311,10 @@ const DesignRow: React.FC<{
   onDownload: () => void;
   onDownloadTiff: () => void;
   isTiffDownloading?: boolean;
+  tiffStatus?: string;
   onDelete: () => void;
   formatDate: (date: Date | string) => string;
-}> = ({ design, adminMode, onView, onEdit, onEditInBuilder, onDownload, onDownloadTiff, isTiffDownloading, onDelete, formatDate }) => (
+}> = ({ design, adminMode, onView, onEdit, onEditInBuilder, onDownload, onDownloadTiff, isTiffDownloading, tiffStatus, onDelete, formatDate }) => (
   <tr className="hover:bg-gray-50">
     <td className="px-4 py-3 max-w-[260px]">
       <div className="flex items-center gap-2 min-w-0">
@@ -1362,8 +1384,8 @@ const DesignRow: React.FC<{
               onClick={onDownloadTiff}
               disabled={isTiffDownloading}
               className="px-1.5 py-1 text-xs text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Download TIFF (print-ready, server-side 300 DPI)"
-            >{isTiffDownloading ? '⏳' : 'TIFF'}</button>
+              title={tiffStatus || 'Download TIFF (print-ready, server-side 300 DPI)'}
+            >{isTiffDownloading ? (tiffStatus ? '⏳…' : '⏳') : 'TIFF'}</button>
           </div>
         )}
         <button
