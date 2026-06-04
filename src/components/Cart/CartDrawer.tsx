@@ -31,21 +31,27 @@ export const CartDrawer: React.FC = () => {
     setIsCheckingOut(true);
     setCheckoutStatus('Preparing order...');
 
+    const resetState = () => {
+      setIsCheckingOut(false);
+      setCheckoutStatus('');
+    };
+
     try {
-      // Update existing 'In Cart' orders to 'Created', or create new orders if needed
+      // C3: update/create orders per item with individual error handling
       const customerName = getCustomerName() || 'Customer';
       for (const item of items) {
-        if (item.orderId) {
-          updateOrderStatus(item.orderId, 'Created');
-        } else {
-          createOrder(customerName, [item], 'Created');
+        try {
+          if (item.orderId) {
+            updateOrderStatus(item.orderId, 'Created');
+          } else {
+            createOrder(customerName, [item], 'Created');
+          }
+        } catch (orderErr) {
+          console.error('[GS] Order status update failed for item:', item.id, orderErr);
         }
       }
 
       if (isEmbedded() && areVariantsConfigured()) {
-        // ── GET navigation via window.open(_top) ─────────────────────
-        // Works from cross-origin iframes; bypasses all JS interceptors (Kommo CRM etc.)
-        // Does NOT depend on the Shopify liquid — the iframe navigates the top window directly.
         const lineItems = items.map(item => {
           const variantId = getVariantId(
             item.design.boardSize.width,
@@ -69,31 +75,35 @@ export const CartDrawer: React.FC = () => {
         });
 
         setCheckoutStatus('Redirecting to checkout...');
-        clearCart();
-        closeCart();
 
-        // Send postMessage to Shopify parent page — it clears the cart first,
-        // then chains /cart/add GET navigations correctly for all items.
+        // C1: postMessage first — if it fails, cart is NOT yet cleared
         window.parent.postMessage({
           type: 'gang-sheet-checkout',
           items: lineItems,
         }, '*');
 
+        // Clear local state after message is queued
+        clearCart();
+        closeCart();
+
+        // C2: page navigation destroys the iframe, but if Liquid fails the button
+        // stays stuck. Auto-reset after 15s so the user can retry.
+        setTimeout(resetState, 15000);
+
       } else {
         // ── Standalone / fallback ──────────────────────────────────────
         clearCart();
         closeCart();
+        resetState();
         alert('✅ Order saved!');
       }
     } catch (error) {
       console.error('Checkout error:', error);
+      resetState();
       alert(
         `❌ Checkout failed!\n\n` +
         `${error instanceof Error ? error.message : 'Unknown error'}`
       );
-    } finally {
-      setIsCheckingOut(false);
-      setCheckoutStatus('');
     }
   };
 
