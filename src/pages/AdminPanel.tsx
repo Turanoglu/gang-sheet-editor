@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { downloadAsTiff } from '../utils/export';
 import { Link, useNavigate } from 'react-router-dom';
 import { useOrderStore } from '../store/orderStore';
 import { WelcomeDashboard } from '../components/Dashboard';
