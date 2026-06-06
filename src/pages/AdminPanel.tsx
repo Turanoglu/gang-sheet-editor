@@ -628,6 +628,16 @@ export const AdminPanel: React.FC = () => {
         }
         if (renderRes.status === 503 || msg.toLowerCase().includes('memory')) {
           alert(`⚠️ Sunucu bu boyut için yeterli RAM'e sahip değil.\n\nÇözüm: Render.com Starter ($7/ay) planına geç.`);
+        } else if (errBody.diagnostics?.skipped?.some((s: string) => s.includes('does not exist'))) {
+          // Assets never uploaded to R2 — data recovery needed
+          alert(
+            `❌ Görsel dosyaları R2'de bulunamadı.\n\n` +
+            `Bu tasarımın görselleri hiç bulut depolamaya yüklenmemiş (eski tasarım formatı veya kaydetme hatası).\n\n` +
+            `Çözüm seçenekleri:\n` +
+            `1. Müşteriden aynı tarayıcıda editörü açıp tasarımını yükleyip "Save & Add to Cart" yapmasını isteyin — bu görselleri R2'ye yükler.\n` +
+            `2. Müşteri tarayıcısını temizlediyse veya farklı cihazdaysa: tasarımı sıfırdan yeniden oluşturup sipariş vermesi gerekir.\n\n` +
+            `Design ID: ${design.id}`
+          );
         } else if (errBody.diagnostics) {
           alert(`❌ ${msg}\n\nTarayıcı Console'unu aç (F12) ve "[TIFF diagnostics]" satırını kopyalayıp paylaş.`);
         } else {

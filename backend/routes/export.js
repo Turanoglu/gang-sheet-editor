@@ -260,8 +260,11 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
         res.setHeader('Content-Length', String(tiffBuf.length));
         return res.send(tiffBuf);
       } catch (fallbackErr) {
+        const allMissing = skippedReasons.every(r => r.includes('does not exist'));
         return res.status(422).json({
-          error: 'Asset dosyaları ve full-export.png R2\'de bulunamadı. Tasarımı editörde açıp tekrar kaydet.',
+          error: allMissing
+            ? 'Görsel dosyaları R2\'de bulunamadı. Müşteriden aynı tarayıcıda editörü açıp tasarımı "Save & Add to Cart" ile kaydetmesini isteyin — bu görselleri R2\'ye yükler.'
+            : 'Asset dosyaları R2\'de bulunamadı. Tasarımı editörde açıp tekrar kaydet.',
           diagnostics: { customerId, designId, skipped: skippedReasons },
         });
       }
