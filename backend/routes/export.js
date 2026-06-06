@@ -36,14 +36,20 @@ function safeDpi(boardW, boardH, budgetMB = 130) {
   return Math.max(72, Math.min(300, Math.floor(rawDpi / 25) * 25));
 }
 
-// Minimal uncompressed TIFF encoder — ported from frontend export.ts
-function writeTiff(rgbaData, w, h, dpi) {
+// Minimal uncompressed TIFF encoder — auto-detects 3-channel (RGB) or 4-channel (RGBA) input.
+// sharp().raw() may output RGB or RGBA depending on source PNG alpha state; we handle both.
+function writeTiff(rawData, w, h, dpi) {
   const pixelCount = w * h;
+  // Detect actual channel count from buffer size (must be integer)
+  const ch = rawData.length / pixelCount;
+  if (ch !== 3 && ch !== 4) {
+    throw new Error(`writeTiff: unexpected channel count ${ch} (buffer ${rawData.length}, pixels ${pixelCount})`);
+  }
   const rgb = Buffer.alloc(pixelCount * 3);
   for (let i = 0; i < pixelCount; i++) {
-    rgb[i * 3]     = rgbaData[i * 4];
-    rgb[i * 3 + 1] = rgbaData[i * 4 + 1];
-    rgb[i * 3 + 2] = rgbaData[i * 4 + 2];
+    rgb[i * 3]     = rawData[i * ch];
+    rgb[i * 3 + 1] = rawData[i * ch + 1];
+    rgb[i * 3 + 2] = rawData[i * ch + 2];
   }
 
   const NUM_TAGS = 13;
@@ -265,8 +271,9 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
       console.warn(`[export] ${skippedReasons.length} item(s) skipped:`, skippedReasons);
     }
 
-    // Final: extract raw RGBA for TIFF encoding
-    const { data } = await sharp(canvas).raw().toBuffer({ resolveWithObject: true });
+    // Final: flatten to white (removes alpha) then extract raw RGB for TIFF encoding.
+    // flatten() guarantees 3-channel output; writeTiff auto-detects channel count.
+    const { data } = await sharp(canvas).flatten({ background: { r: 255, g: 255, b: 255 } }).raw().toBuffer({ resolveWithObject: true });
 
     const tiffBuf = writeTiff(data, boardPxW, boardPxH, dpi);
 

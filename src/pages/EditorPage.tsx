@@ -130,7 +130,7 @@ export const EditorPage: React.FC = () => {
   useEffect(() => {
     if (!currentDesign) return;
     const design = currentDesign;
-    setCurrentDesign(null); // clear first so effect doesn't re-fire
+    setCurrentDesign(null);
     setEditingDesign(design);
     loadDesign(design);
   }, [currentDesign]); // eslint-disable-line react-hooks/exhaustive-deps

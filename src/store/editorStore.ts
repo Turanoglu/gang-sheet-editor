@@ -888,28 +888,26 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
       }
 
       // Recreate each HTMLImageElement from the stored dataUrl/viewUrl.
+      // Do NOT set crossOrigin: R2 presigned URLs may not return CORS headers,
+      // and setting crossOrigin would block image loading entirely.
+      // Canvas tainting is acceptable — TIFF export is server-side, not canvas.toDataURL().
       const loadedAssets: Record<string, import('../types').Asset> = {};
       await Promise.all(
         Object.entries(rawAssets).map(
           ([id, raw]) =>
             new Promise<void>((resolve) => {
               if (!raw.dataUrl) {
-                // No URL — add as-is so item at least exists in store
+                console.warn(`[loadDesign] asset ${id} has no dataUrl — skipping image load`);
                 loadedAssets[id] = { ...raw, imageEl: new window.Image() };
                 resolve();
                 return;
               }
               const img = new window.Image();
-              // crossOrigin needed for R2 presigned URLs used in canvas context
-              if (!raw.dataUrl.startsWith('data:')) img.crossOrigin = 'anonymous';
               img.onload = () => { loadedAssets[id] = { ...raw, imageEl: img }; resolve(); };
               img.onerror = () => {
-                console.warn(`[loadDesign] image load failed for asset ${id} — retrying without crossOrigin`);
-                // Retry without crossOrigin (some CDN/R2 configs don't send CORS headers)
-                const img2 = new window.Image();
-                img2.onload = () => { loadedAssets[id] = { ...raw, imageEl: img2 }; resolve(); };
-                img2.onerror = () => { console.warn(`[loadDesign] image load failed (no-cors) for asset ${id}`); loadedAssets[id] = { ...raw, imageEl: img2 }; resolve(); };
-                img2.src = raw.dataUrl;
+                console.warn(`[loadDesign] image load FAILED for asset ${id} (url: ${raw.dataUrl.slice(0, 80)}...)`);
+                loadedAssets[id] = { ...raw, imageEl: img };
+                resolve();
               };
               img.src = raw.dataUrl;
             })
