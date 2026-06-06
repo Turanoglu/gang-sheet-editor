@@ -237,30 +237,18 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
   // Minimum item dimension: 0.25 inches in board pixels
   const MIN_ITEM_BOARD_PX = inchesToPx(0.25, dpi);
 
-  // Handle drag end — clamp to board bounds (best-effort for rotation=0)
+  // Handle drag end — save raw position (no clamping so overflow warning works)
   const handleDragEnd = useCallback(
     (e: Konva.KonvaEventObject<DragEvent>, itemId: string) => {
       const node = e.target;
-      const item = items.find((i) => i.id === itemId);
-      const rawX = node.x() / displayScale;
-      const rawY = node.y() / displayScale;
-
-      const itemW = item?.width ?? 0;
-      const itemH = item?.height ?? 0;
-      const clampedX = Math.max(0, Math.min(boardPxWidth - itemW, rawX));
-      const clampedY = Math.max(0, Math.min(boardPxHeight - itemH, rawY));
-
-      if (clampedX !== rawX || clampedY !== rawY) {
-        node.x(clampedX * displayScale);
-        node.y(clampedY * displayScale);
-      }
-
-      updateItem(itemId, { x: clampedX, y: clampedY });
+      const x = node.x() / displayScale;
+      const y = node.y() / displayScale;
+      updateItem(itemId, { x, y });
     },
-    [displayScale, updateItem, items, boardPxWidth, boardPxHeight]
+    [displayScale, updateItem]
   );
 
-  // Handle transform end — clamp size and position to board bounds
+  // Handle transform end — enforce minimum size, allow overflow so warning works
   const handleTransformEnd = useCallback(
     (e: Konva.KonvaEventObject<Event>, itemId: string) => {
       const node = e.target as Konva.Image;
@@ -268,27 +256,21 @@ export const GangSheetCanvas: React.FC<GangSheetCanvasProps> = ({
       const scaleX = node.scaleX();
       const scaleY = node.scaleY();
 
-      // Calculate new width/height in board coordinates, enforcing minimum
+      // Enforce minimum size; no position clamping so overflow warning fires
       const newWidth = Math.max(MIN_ITEM_BOARD_PX, (node.width() * scaleX) / displayScale);
       const newHeight = Math.max(MIN_ITEM_BOARD_PX, (node.height() * scaleY) / displayScale);
-
-      // Clamp position so item stays within board (best-effort for rotation=0)
-      const newX = Math.max(0, Math.min(boardPxWidth - newWidth, node.x() / displayScale));
-      const newY = Math.max(0, Math.min(boardPxHeight - newHeight, node.y() / displayScale));
-
+      const newX = node.x() / displayScale;
+      const newY = node.y() / displayScale;
       const newRotation = node.rotation();
 
-      // Reset scale to 1 and update width/height
       node.scaleX(1);
       node.scaleY(1);
       node.width(newWidth * displayScale);
       node.height(newHeight * displayScale);
-      node.x(newX * displayScale);
-      node.y(newY * displayScale);
 
       updateItem(itemId, { x: newX, y: newY, width: newWidth, height: newHeight, rotation: newRotation });
     },
-    [displayScale, updateItem, boardPxWidth, boardPxHeight, MIN_ITEM_BOARD_PX]
+    [displayScale, updateItem, MIN_ITEM_BOARD_PX]
   );
 
 

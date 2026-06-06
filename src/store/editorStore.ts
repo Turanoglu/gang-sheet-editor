@@ -829,6 +829,8 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
 
   loadDesign: async (design) => {
     try {
+      console.log('[loadDesign] start', { id: design.id, customerId: (design as any).customerId, hasCanvasData: !!design.canvasData, hasAssetsMetadata: !!(design as any).assetsMetadata, hasAssetsData: !!design.assetsData });
+
       // Restore assetsData from sessionStorage cache if cloud sync wiped it from memory
       let designWithAssets = design;
       if (!design.assetsData && !(design as any).assetsMetadata) {
@@ -838,8 +840,8 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
         } catch { /* ignore */ }
       }
 
-      // Always fetch fresh from cloud when editing another customer's design (admin mode),
-      // identified by design.customerId being present. Also fetch when local data is incomplete.
+      // Fetch fresh from cloud when editing another customer's design (admin mode),
+      // or when local data is incomplete.
       const ownerCustomerId = (design as any).customerId as string | undefined;
       let resolvedDesign = designWithAssets;
       if (ownerCustomerId || !designWithAssets.canvasData || (!(designWithAssets as any).assetsMetadata && !designWithAssets.assetsData)) {
@@ -851,13 +853,20 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
               ...(cloudDesign.canvasData && { canvasData: cloudDesign.canvasData }),
               ...((cloudDesign as any).assetsMetadata && { assetsMetadata: (cloudDesign as any).assetsMetadata }),
             };
+            console.log('[loadDesign] cloud fetch OK', { hasCanvasData: !!cloudDesign.canvasData, assetCount: Object.keys((cloudDesign as any).assetsMetadata || {}).length });
+          } else {
+            console.warn('[loadDesign] cloud returned null, using local data');
           }
-        } catch { /* use local as fallback */ }
+        } catch (err) {
+          console.warn('[loadDesign] cloud fetch failed, using local data:', err);
+        }
       }
 
       const items: import('../types').CanvasItem[] = resolvedDesign.canvasData
         ? JSON.parse(resolvedDesign.canvasData)
         : [];
+      console.log('[loadDesign] parsed items:', items.length, 'boardSize:', resolvedDesign.boardSize);
+
       let rawAssets: Record<string, import('../types').Asset> = resolvedDesign.assetsData
         ? JSON.parse(resolvedDesign.assetsData)
         : {};
@@ -871,27 +880,42 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
             originalWidth: meta.originalWidth,
             originalHeight: meta.originalHeight,
             dataUrl: meta.viewUrl || '',
-            // Preserve r2Key so that when the design is re-saved, upload is skipped and r2Key stays intact
             ...(meta.r2Key && { r2Key: meta.r2Key }),
             imageEl: new window.Image(),
           };
         }
+        console.log('[loadDesign] built rawAssets from assetsMetadata:', Object.keys(rawAssets).length);
       }
 
-      // imageEl is a DOM object — it cannot be serialized to JSON.
-      // Recreate each HTMLImageElement from the stored dataUrl.
+      // Recreate each HTMLImageElement from the stored dataUrl/viewUrl.
       const loadedAssets: Record<string, import('../types').Asset> = {};
       await Promise.all(
         Object.entries(rawAssets).map(
           ([id, raw]) =>
             new Promise<void>((resolve) => {
+              if (!raw.dataUrl) {
+                // No URL — add as-is so item at least exists in store
+                loadedAssets[id] = { ...raw, imageEl: new window.Image() };
+                resolve();
+                return;
+              }
               const img = new window.Image();
+              // crossOrigin needed for R2 presigned URLs used in canvas context
+              if (!raw.dataUrl.startsWith('data:')) img.crossOrigin = 'anonymous';
               img.onload = () => { loadedAssets[id] = { ...raw, imageEl: img }; resolve(); };
-              img.onerror = () => { console.warn(`[loadDesign] Failed to load asset image: ${id} (url may be expired)`); loadedAssets[id] = { ...raw, imageEl: img }; resolve(); };
+              img.onerror = () => {
+                console.warn(`[loadDesign] image load failed for asset ${id} — retrying without crossOrigin`);
+                // Retry without crossOrigin (some CDN/R2 configs don't send CORS headers)
+                const img2 = new window.Image();
+                img2.onload = () => { loadedAssets[id] = { ...raw, imageEl: img2 }; resolve(); };
+                img2.onerror = () => { console.warn(`[loadDesign] image load failed (no-cors) for asset ${id}`); loadedAssets[id] = { ...raw, imageEl: img2 }; resolve(); };
+                img2.src = raw.dataUrl;
+              };
               img.src = raw.dataUrl;
             })
         )
       );
+      console.log('[loadDesign] loaded assets:', Object.keys(loadedAssets).length);
 
       const { activeSheetId } = get();
       set((state) => ({
@@ -901,15 +925,15 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
         selectedIds: [],
         history: [],
         historyIndex: -1,
-        // Keep sheets in sync so multi-sheet save works correctly after edit
         sheets: state.sheets.map((s) =>
           s.id === activeSheetId
             ? { ...s, items, assets: loadedAssets, boardSize: resolvedDesign.boardSize }
             : s
         ),
       }));
+      console.log('[loadDesign] done — items set on canvas');
     } catch (err) {
-      console.error('Failed to load design into editor:', err);
+      console.error('[loadDesign] fatal error:', err);
     }
   },
 

@@ -348,8 +348,9 @@ export const AdminPanel: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [sidebarView, setSidebarView] = useState<SidebarView>('Welcome');
 
-  // Admin mode state
-  const [adminMode, setAdminMode] = useState(() => !!localStorage.getItem('gang-sheet-admin-key'));
+  // Admin mode state — key is kept in sessionStorage only (tab-scoped, not persistent).
+  // Never stored in localStorage so it doesn't appear in DevTools Application → Local Storage.
+  const [adminMode, setAdminMode] = useState(() => !!sessionStorage.getItem('gang-sheet-admin-key'));
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminKeyInput, setAdminKeyInput] = useState('');
   const [adminLoginError, setAdminLoginError] = useState('');
@@ -382,7 +383,7 @@ export const AdminPanel: React.FC = () => {
       loadFromCloud();
       return;
     }
-    const key = localStorage.getItem('gang-sheet-admin-key');
+    const key = sessionStorage.getItem('gang-sheet-admin-key');
     if (!key) return;
     setAdminLoading(true);
     try {
@@ -396,7 +397,7 @@ export const AdminPanel: React.FC = () => {
     } catch (e) {
       console.error('Failed to load admin data:', e);
       if (e instanceof Error && e.message === 'Unauthorized') {
-        localStorage.removeItem('gang-sheet-admin-key');
+        sessionStorage.removeItem('gang-sheet-admin-key');
         setAdminMode(false);
       }
     } finally {
@@ -422,7 +423,7 @@ export const AdminPanel: React.FC = () => {
           getAdminOrdersFromCloud(adminKeyInput),
           getAdminDesignsFromCloud(adminKeyInput),
         ]);
-        localStorage.setItem('gang-sheet-admin-key', adminKeyInput);
+        sessionStorage.setItem('gang-sheet-admin-key', adminKeyInput);
         setAdminOrders(fetchedOrders);
         setAdminDesigns(fetchedDesigns);
         setAdminMode(true);
@@ -453,14 +454,14 @@ export const AdminPanel: React.FC = () => {
   };
 
   const handleAdminLogout = () => {
-    localStorage.removeItem('gang-sheet-admin-key');
+    sessionStorage.removeItem('gang-sheet-admin-key');
     setAdminMode(false);
     setAdminOrders([]);
     setAdminDesigns([]);
   };
 
   const handleCleanupDesigns = async () => {
-    const key = localStorage.getItem('gang-sheet-admin-key');
+    const key = sessionStorage.getItem('gang-sheet-admin-key');
     if (!key) return;
     if (!confirm('R2\'deki eski design dosyalarındaki büyük veriyi temizle? (Bir kez yapılması yeterli)')) return;
     try {
@@ -549,7 +550,7 @@ export const AdminPanel: React.FC = () => {
     if (adminMode) {
       const order = adminOrders.find(o => o.id === orderId);
       if (!order?.customerId) return;
-      const key = localStorage.getItem('gang-sheet-admin-key')!;
+      const key = sessionStorage.getItem('gang-sheet-admin-key')!;
       try {
         await updateAdminOrderStatus(order.customerId, orderId, newStatus, key);
         setAdminOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
@@ -582,7 +583,7 @@ export const AdminPanel: React.FC = () => {
 
   // Download design as PNG or TIFF
   const handleDownloadDesign = async (design: GangSheetDesign, format: 'png' | 'tiff' = 'png') => {
-    const adminKey = localStorage.getItem('gang-sheet-admin-key');
+    const adminKey = sessionStorage.getItem('gang-sheet-admin-key');
     if (!design.id || !design.customerId) { alert('No image available for download'); return; }
 
     const baseName = `${design.name.replace(/\s+/g, '_')}_${design.boardSize.width}x${design.boardSize.height}`;
@@ -702,7 +703,7 @@ export const AdminPanel: React.FC = () => {
   const handleDeleteDesign = async (design: GangSheetDesign) => {
     if (!confirm(`Are you sure you want to delete "${design.name}"?`)) return;
     if (adminMode && design.customerId) {
-      const key = localStorage.getItem('gang-sheet-admin-key')!;
+      const key = sessionStorage.getItem('gang-sheet-admin-key')!;
       try {
         await deleteAdminDesign(design.customerId, design.id, key);
         setAdminDesigns(prev => prev.filter(d => d.id !== design.id));
@@ -717,7 +718,7 @@ export const AdminPanel: React.FC = () => {
   const handleDeleteOrder = async (order: Order) => {
     if (!confirm(`Are you sure you want to delete order ${order.orderNumber}?`)) return;
     if (adminMode && order.customerId) {
-      const key = localStorage.getItem('gang-sheet-admin-key')!;
+      const key = sessionStorage.getItem('gang-sheet-admin-key')!;
       try {
         await deleteAdminOrder(order.customerId, order.id, key);
         setAdminOrders(prev => prev.filter(o => o.id !== order.id));

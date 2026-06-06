@@ -22,11 +22,21 @@ const s3Client = new S3Client({
 const BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
 // Helper: Get customer ID from request (from Shopify)
+// Shopify customer IDs are numeric strings. We validate format to prevent path traversal
+// (e.g. "../../admin") — a numeric-only ID cannot escape the users/ prefix in R2 keys.
+const VALID_CUSTOMER_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const getCustomerId = (req) => {
-  return req.headers['x-shopify-customer-id'] ||
-         req.query.customerId ||
-         req.body?.customerId ||
-         'anonymous';
+  const raw = req.headers['x-shopify-customer-id'] ||
+              req.query.customerId ||
+              req.body?.customerId ||
+              'anonymous';
+  const id = String(raw).trim();
+  // Reject IDs that look like path traversal or are too long
+  if (!VALID_CUSTOMER_ID_RE.test(id)) {
+    console.warn('[storage] Rejected invalid customer ID:', JSON.stringify(id).slice(0, 80));
+    return 'anonymous';
+  }
+  return id;
 };
 
 // Helper: Get shop domain from request
