@@ -556,6 +556,7 @@ export const AdminPanel: React.FC = () => {
         setAdminOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
       } catch (e) {
         console.error('Failed to update order status:', e);
+        alert(`❌ Sipariş durumu güncellenemedi: ${e instanceof Error ? e.message : e}`);
       }
     } else {
       updateOrderStatus(orderId, newStatus);
@@ -665,33 +666,46 @@ export const AdminPanel: React.FC = () => {
     URL.revokeObjectURL(blobUrl);
   };
 
-  // Download order images
-  const handleDownloadOrder = (order: Order) => {
-    // Download all design full exports in the order
-    (order.items ?? []).forEach((item, index) => {
-      // Prefer full export URL, fallback to thumbnail
-      const downloadUrl = item.design?.fullExportUrl || item.design?.thumbnailUrl;
+  // Download order images — uses proxy endpoint so URLs never expire
+  const handleDownloadOrder = async (order: Order) => {
+    const adminKey = sessionStorage.getItem('gang-sheet-admin-key');
+    const apiBase = import.meta.env.VITE_BACKEND_URL || 'https://gang-sheet-backend.onrender.com';
+    const items = order.items ?? [];
+    if (items.length === 0) { alert('Bu siparişte indirilecek görsel yok.'); return; }
 
-      if (downloadUrl) {
-        setTimeout(() => {
-          const link = document.createElement('a');
-          link.href = downloadUrl;
-          link.download = `${order.orderNumber}_item${index + 1}_${(item.design?.name || 'design').replace(/\s+/g, '_')}.png`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        }, index * 500); // Stagger downloads
+    for (let index = 0; index < items.length; index++) {
+      const item = items[index];
+      const cid = item.design?.customerId || order.customerId;
+      const did = item.design?.id;
+      if (!cid || !did) continue;
+
+      await new Promise(resolve => setTimeout(resolve, index * 500));
+      try {
+        const res = await fetch(
+          `${apiBase}/api/storage/proxy-image?customerId=${encodeURIComponent(cid)}&designId=${encodeURIComponent(did)}`,
+          { headers: adminKey ? { 'X-Admin-Key': adminKey } : {} },
+        );
+        if (!res.ok) { console.warn(`Item ${index + 1} indirilemedi: ${res.status}`); continue; }
+        const blobUrl = URL.createObjectURL(await res.blob());
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = `${order.orderNumber}_item${index + 1}_${(item.design?.name || 'design').replace(/\s+/g, '_')}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      } catch (e) {
+        console.warn(`Item ${index + 1} indirme hatası:`, e);
       }
-    });
+    }
   };
 
   // Edit design - load into editor
   const handleEditDesign = (design: GangSheetDesign) => {
     setCurrentDesign(design);
-    const cid = getCustomerId();
+    // Admin modunda: tasarımın sahibi müşterinin ID'sini kullan, yoksa kendi ID'ni
+    const cid = (adminMode && design.customerId) ? design.customerId : getCustomerId();
     const shopDomain = getShopDomain();
-    // Derive the 'shop' slug from shopDomain (e.g. "inkdyno.com" → "inkdyno")
-    // Fall back to 'inkdyno' so ShopifyAuthGate doesn't block the editor.
     const shopSlug = shopDomain
       ? shopDomain.replace(/^www\./, '').split('.')[0]
       : 'inkdyno';
@@ -719,6 +733,7 @@ export const AdminPanel: React.FC = () => {
         setAdminDesigns(prev => prev.filter(d => d.id !== design.id));
       } catch (e) {
         console.error('Failed to delete design:', e);
+        alert(`❌ Tasarım silinemedi: ${e instanceof Error ? e.message : e}`);
       }
     } else {
       deleteDesign(design.id);
@@ -734,6 +749,7 @@ export const AdminPanel: React.FC = () => {
         setAdminOrders(prev => prev.filter(o => o.id !== order.id));
       } catch (e) {
         console.error('Failed to delete order:', e);
+        alert(`❌ Sipariş silinemedi: ${e instanceof Error ? e.message : e}`);
       }
     } else {
       deleteOrder(order.id);
