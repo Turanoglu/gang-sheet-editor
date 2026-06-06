@@ -220,6 +220,7 @@ export const LeftSidebar: React.FC = () => {
     updateItem,
     duplicateSelectedItems,
     autoFillSheet,
+    autoArrangeSheet,
     dpi,
     setItemQuantity,
     applyQuantities,
@@ -743,18 +744,27 @@ export const LeftSidebar: React.FC = () => {
           {/* Action Buttons */}
           <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={autoFillSheet}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-lg 
-                         text-xs font-medium transition-colors"
+              onClick={autoArrangeSheet}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white py-2 rounded-lg
+                         text-xs font-medium transition-colors col-span-2"
+              title="Miktarları uygula ve tüm görselleri otomatik yerleştir"
             >
-              Auto Fill Sheet
+              ✦ Auto Arrange
+            </button>
+            <button
+              onClick={autoFillSheet}
+              className="bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg
+                         text-xs font-medium transition-colors"
+              title="Seçili görseli board'a kopyalayarak doldur"
+            >
+              Auto Fill
             </button>
             <button
               onClick={duplicateSelectedItems}
-              className="bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg 
+              className="bg-gray-500 hover:bg-gray-600 text-white py-2 rounded-lg
                          text-xs font-medium transition-colors"
             >
-              Duplicate Image
+              Duplicate
             </button>
           </div>
         </div>

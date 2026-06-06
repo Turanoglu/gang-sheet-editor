@@ -120,6 +120,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ isPanMode = false, onTogglePan
     undo,
     redo,
     autoFillSheet,
+    autoArrangeSheet,
     history,
     historyIndex,
     gridVisible,
@@ -312,7 +313,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({ isPanMode = false, onTogglePan
         <ToolButton icon={<ZoomInIcon />} title="Zoom In" onClick={zoomIn} />
       </div>
 
-      {/* Auto Build */}
+      {/* Auto Build + Auto Arrange */}
       <div className="flex items-center gap-2">
         <button
           onClick={autoFillSheet}
@@ -322,9 +323,23 @@ export const Toolbar: React.FC<ToolbarProps> = ({ isPanMode = false, onTogglePan
               ? 'bg-blue-500 hover:bg-blue-600 text-white'
               : 'bg-gray-100 text-gray-400 cursor-not-allowed'
             }`}
+          title="Seçili görseli board'a kopyalayarak doldur"
         >
           <RefreshIcon />
           Auto Build
+        </button>
+        <button
+          onClick={autoArrangeSheet}
+          disabled={items.length === 0}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors
+            ${items.length > 0
+              ? 'bg-emerald-500 hover:bg-emerald-600 text-white'
+              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+            }`}
+          title="Tüm görselleri miktar ve boşluk ayarlarına göre otomatik yerleştir"
+        >
+          <RefreshIcon />
+          Auto Arrange
         </button>
       </div>
     </div>

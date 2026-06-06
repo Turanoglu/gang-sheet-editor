@@ -202,6 +202,7 @@ export interface EditorActions {
   // Quantity
   setItemQuantity: (assetId: string, quantity: number) => void;
   applyQuantities: () => void;
+  autoArrangeSheet: () => void;
   
   // Alignment
   alignItems: (direction: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => void;

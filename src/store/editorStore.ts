@@ -629,6 +629,79 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     set({ items: finalItems });
   },
 
+  // Auto Arrange — FFDH (First Fit Decreasing Height) bin packing
+  // Expands all assets by their itemQuantities, sorts tallest-first, then
+  // packs shelf-by-shelf with no wasted gaps between asset groups.
+  autoArrangeSheet: () => {
+    const { items, itemQuantities, getBoardPxWidth, getBoardPxHeight, autoFillSettings } = get();
+    if (items.length === 0) return;
+
+    get().pushToHistory();
+
+    const boardWidth = getBoardPxWidth();
+    const boardHeight = getBoardPxHeight();
+    const spacing = autoFillSettings.spacingPx;
+    const margin = autoFillSettings.marginPx;
+    const usableW = boardWidth - 2 * margin;
+
+    // 1. Expand items by quantity — one CanvasItem template per asset
+    const assetTemplates = new Map<string, CanvasItem>();
+    items.forEach((item) => {
+      if (!assetTemplates.has(item.assetId)) assetTemplates.set(item.assetId, item);
+    });
+
+    const toPlace: CanvasItem[] = [];
+    assetTemplates.forEach((template, assetId) => {
+      const qty = itemQuantities[assetId] ?? 1;
+      for (let i = 0; i < qty; i++) {
+        toPlace.push({ ...template, id: i === 0 ? template.id : uuidv4() });
+      }
+    });
+
+    // 2. Sort by height descending (FFDH — tallest first → better row packing)
+    toPlace.sort((a, b) => b.height - a.height);
+
+    // 3. Shelf packing
+    type Shelf = { y: number; height: number; usedW: number };
+    const shelves: Shelf[] = [];
+    const placed: CanvasItem[] = [];
+    let zCounter = 1;
+
+    for (const item of toPlace) {
+      const iw = item.width;
+      const ih = item.height;
+      if (iw > usableW) continue; // item wider than board — skip
+
+      // Find first shelf that fits this item
+      let targetShelf: Shelf | null = null;
+      for (const shelf of shelves) {
+        if (ih <= shelf.height && shelf.usedW + iw <= usableW) {
+          targetShelf = shelf;
+          break;
+        }
+      }
+
+      if (!targetShelf) {
+        // Open a new shelf
+        const prevShelf = shelves[shelves.length - 1];
+        const newY = prevShelf ? prevShelf.y + prevShelf.height + spacing : margin;
+        if (newY + ih > boardHeight - margin) continue; // no vertical space left
+        targetShelf = { y: newY, height: ih, usedW: 0 };
+        shelves.push(targetShelf);
+      }
+
+      placed.push({
+        ...item,
+        x: margin + targetShelf.usedW,
+        y: targetShelf.y,
+        zIndex: zCounter++,
+      });
+      targetShelf.usedW += iw + spacing;
+    }
+
+    set({ items: placed, selectedIds: [] });
+  },
+
   // Alignment
   alignItems: (direction: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') => {
     const { items, selectedIds, getBoardPxWidth, getBoardPxHeight } = get();
