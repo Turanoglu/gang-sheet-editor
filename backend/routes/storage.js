@@ -4,6 +4,7 @@ const {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   DeleteObjectCommand,
   ListObjectsV2Command,
 } = require('@aws-sdk/client-s3');
@@ -135,15 +136,16 @@ router.get('/designs', async (req, res) => {
           }));
           const bodyContents = await streamToString(getResponse.Body);
           const design = JSON.parse(bodyContents);
-          // Regenerate fresh presigned thumbnail URL (original expires after 24h)
+          // Regenerate fresh presigned thumbnail URL only if file exists in R2
           const thumbKey = `exports/${customerId}/${design.id}/thumbnail.png`;
           try {
+            await s3Client.send(new HeadObjectCommand({ Bucket: BUCKET_NAME, Key: thumbKey }));
             design.thumbnailUrl = await getSignedUrl(
               s3Client,
               new GetObjectCommand({ Bucket: BUCKET_NAME, Key: thumbKey }),
               { expiresIn: 86400 }
             );
-          } catch { /* keep existing url if key generation fails */ }
+          } catch { /* thumbnail.png not in R2 — keep existing thumbnailUrl from design JSON */ }
           // Regenerate signed URLs for individual asset images
           if (design.assetsMetadata && typeof design.assetsMetadata === 'object') {
             await Promise.all(Object.entries(design.assetsMetadata).map(async ([, meta]) => {
@@ -599,15 +601,16 @@ router.get('/admin/designs', requireAdminKey, async (req, res) => {
         const parsed = stripHeavyFields(JSON.parse(body));
         const parts = obj.Key.split('/');
         parsed.customerId = parts[1];
-        // Refresh thumbnail presigned URL
+        // Refresh thumbnail presigned URL only if file exists in R2
         const thumbKey = `exports/${parsed.customerId}/${parsed.id}/thumbnail.png`;
         try {
+          await s3Client.send(new HeadObjectCommand({ Bucket: BUCKET_NAME, Key: thumbKey }));
           parsed.thumbnailUrl = await getSignedUrl(
             s3Client,
             new GetObjectCommand({ Bucket: BUCKET_NAME, Key: thumbKey }),
             { expiresIn: 86400 }
           );
-        } catch { /* keep existing */ }
+        } catch { /* thumbnail.png not in R2 — thumbnailUrl from design JSON is used */ }
         // Refresh assetsMetadata viewUrls so Edit in Builder can load images
         if (parsed.assetsMetadata && typeof parsed.assetsMetadata === 'object') {
           await Promise.all(Object.entries(parsed.assetsMetadata).map(async ([, meta]) => {
