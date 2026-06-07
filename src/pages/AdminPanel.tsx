@@ -473,7 +473,7 @@ export const AdminPanel: React.FC = () => {
   // Admin mode state — key is kept in sessionStorage only (tab-scoped, not persistent).
   // Never stored in localStorage so it doesn't appear in DevTools Application → Local Storage.
   const [adminMode, setAdminMode] = useState(() => !!sessionStorage.getItem('gang-sheet-admin-key'));
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
+
   const [adminKeyInput, setAdminKeyInput] = useState('');
   const [adminLoginError, setAdminLoginError] = useState('');
 
@@ -1006,47 +1006,6 @@ export const AdminPanel: React.FC = () => {
         onSave={handleSaveDesignName}
       />
 
-      {/* Admin Login Modal */}
-      {showAdminLogin && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-1">Admin Girişi</h3>
-            <p className="text-sm text-gray-500 mb-4">Tüm müşterilerin verilerini görmek için admin şifresini girin.</p>
-            <input
-              type="password"
-              value={adminKeyInput}
-              onChange={(e) => setAdminKeyInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
-              placeholder="Admin şifresi..."
-              autoFocus
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm
-                         focus:outline-none focus:ring-2 focus:ring-purple-500 mb-2"
-            />
-            {adminLoginError && (
-              <p className={`text-sm mb-2 ${adminLoginError.includes('uyanıyor') ? 'text-amber-600' : 'text-red-600'}`}>
-                {adminLoginError}
-              </p>
-            )}
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={() => { setShowAdminLogin(false); setAdminKeyInput(''); setAdminLoginError(''); }}
-                className="flex-1 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                İptal
-              </button>
-              <button
-                onClick={handleAdminLogin}
-                disabled={adminLoading || !adminKeyInput.trim()}
-                className="flex-1 py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg
-                           transition-colors disabled:opacity-50"
-              >
-                {adminLoading ? 'Kontrol ediliyor...' : 'Giriş Yap'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Sidebar */}
       <div className="w-56 bg-white border-r border-gray-200 flex flex-col">
         {/* Logo */}
@@ -1205,21 +1164,10 @@ export const AdminPanel: React.FC = () => {
               </div>
             ) : (
               <div className="px-3">
-                <div className="flex items-center gap-2 px-2 py-1.5 bg-blue-50 rounded-lg mb-2">
+                <div className="flex items-center gap-2 px-2 py-1.5 bg-blue-50 rounded-lg">
                   <span className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
                   <span className="text-xs font-medium text-blue-700">Müşteri Modu</span>
                 </div>
-                <button
-                  onClick={() => setShowAdminLogin(true)}
-                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs
-                             text-gray-600 hover:bg-gray-100 transition-colors"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                  </svg>
-                  Admin Girişi
-                </button>
               </div>
             )}
           </div>
