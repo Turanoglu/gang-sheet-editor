@@ -2,20 +2,6 @@
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ],
-  "redirects": [
-    {
-      "source": "/admin",
-      "has": [{ "type": "host", "value": "gang-sheet-editor.vercel.app" }],
-      "destination": "https://admin2.inkdyno.com/admin",
-      "permanent": false
-    },
-    {
-      "source": "/admin/:path*",
-      "has": [{ "type": "host", "value": "gang-sheet-editor.vercel.app" }],
-      "destination": "https://admin2.inkdyno.com/admin/:path*",
-      "permanent": false
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",
