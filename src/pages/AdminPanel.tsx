@@ -549,7 +549,6 @@ export const AdminPanel: React.FC = () => {
         setAdminOrders(fetchedOrders);
         setAdminDesigns(fetchedDesigns);
         setAdminMode(true);
-        setShowAdminLogin(false);
         setAdminKeyInput('');
         setAdminLoading(false);
         return;
