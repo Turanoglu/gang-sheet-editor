@@ -1589,7 +1589,7 @@ const DesignRow: React.FC<{
     </td>
     <td className="px-4 py-3">
       <button onClick={onEditInBuilder} className="text-blue-600 hover:underline">
-        Create Your Gang...
+        Open in Editor
       </button>
     </td>
     <td className="px-4 py-3 text-gray-700">{design.boardSize.width}" X {design.boardSize.height}"</td>

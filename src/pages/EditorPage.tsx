@@ -34,6 +34,9 @@ export const EditorPage: React.FC = () => {
   // Text tool state
   const [isTextToolActive, setIsTextToolActive] = useState(false);
 
+  // Proof approval modal state
+  const [proofDesigns, setProofDesigns] = useState<GangSheetDesign[] | null>(null);
+
   const {
     removeSelectedItems,
     selectedIds,
@@ -316,44 +319,29 @@ export const EditorPage: React.FC = () => {
     }
   };
 
-  // Handle Save & Add to Cart
-  const handleSaveAndAddToCart = () => {
-    // Build all sheets with the current live state for the active sheet
+  // Build design objects from current sheets (shared between proof and confirm steps)
+  const buildDesigns = (): GangSheetDesign[] | null => {
     const allSheets = sheets.map((s) =>
       s.id === activeSheetId
         ? { ...s, items, assets, boardSize, itemQuantities }
         : s
     );
-
-    // Only process sheets that have at least one item
     const nonEmptySheets = allSheets.filter((s) => s.items.length > 0);
-
-    if (nonEmptySheets.length === 0) {
-      alert('Please add at least one image to your GangFlow sheet before adding to cart.');
-      return;
-    }
+    if (nonEmptySheets.length === 0) return null;
 
     const baseName = editingDesign?.name ?? 'New GangFlow Sheet';
     const now = new Date();
 
-    // Create a design object for each non-empty sheet
-    const designs: GangSheetDesign[] = nonEmptySheets.map((s, idx) => {
+    return nonEmptySheets.map((s, idx) => {
       const isActive = s.id === activeSheetId;
       const isEditedSheet = isActive && editingDesign != null;
-
-      // Only the active sheet can have a freshly rendered export;
-      // other sheets use the tiny thumbnail saved when the user last switched away.
       const thumbnailUrl = isActive ? generateThumbnail('thumbnail') : (s.thumbnailUrl || '');
-      // Non-active sheets: use the print export saved when the user switched away.
-      // Falls back to tiny thumbnail only if user never switched (single-sheet flow).
       const fullExportUrl = isActive
         ? generateThumbnail('print')
         : (sheetPrintExports.current.get(s.id) || s.thumbnailUrl || '');
-
       const sheetName = nonEmptySheets.length === 1
         ? baseName
         : `${baseName} – ${s.label ?? `Sheet ${idx + 1}`}`;
-
       return {
         id: isEditedSheet ? editingDesign!.id : uuidv4(),
         name: sheetName,
@@ -367,13 +355,26 @@ export const EditorPage: React.FC = () => {
         assetsData: JSON.stringify(s.assets),
       };
     });
+  };
 
-    // Save all designs to cloud
+  // Step 1: Show proof modal
+  const handleSaveAndAddToCart = () => {
+    const designs = buildDesigns();
+    if (!designs) {
+      alert('Please add at least one image to your GangFlow sheet before adding to cart.');
+      return;
+    }
+    // Save to cloud immediately so thumbnails are persisted
     designs.forEach((design) => saveDesign(design));
+    setProofDesigns(designs);
+  };
 
-    // Build cart items (one per sheet) and create a single order
+  // Step 2: Confirmed — add to cart
+  const handleConfirmProof = () => {
+    if (!proofDesigns) return;
+    const now = new Date();
     const customerName = getCustomerName() || 'Customer';
-    const orderCartItems = designs.map((design) => ({
+    const orderCartItems = proofDesigns.map((design) => ({
       id: '',
       designId: design.id,
       design,
@@ -381,22 +382,16 @@ export const EditorPage: React.FC = () => {
       pricePerUnit: getPriceForBoard(design.boardSize.width, design.boardSize.height),
       addedAt: now,
     }));
-
     const order = createOrder(customerName, orderCartItems, 'In Cart');
-
-    // Clear entire cart before adding fresh items — prevents stale/duplicate products at checkout
     clearCart();
-
-    // Add each sheet to the cart under the same order
-    designs.forEach((design) => addToCart(design, quantity, order.id));
-
+    proofDesigns.forEach((design) => addToCart(design, quantity, order.id));
+    setProofDesigns(null);
     openCart();
 
-    // Brief success notification
     const notification = document.createElement('div');
     notification.className = 'fixed top-20 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg z-[100] animate-pulse';
-    notification.textContent = designs.length > 1
-      ? `✓ ${designs.length} GangFlow sheet${designs.length > 1 ? 's' : ''} added to cart!`
+    notification.textContent = proofDesigns.length > 1
+      ? `✓ ${proofDesigns.length} GangFlow sheets added to cart!`
       : '✓ Added to cart successfully!';
     document.body.appendChild(notification);
     setTimeout(() => notification.remove(), 2000);
@@ -410,6 +405,90 @@ export const EditorPage: React.FC = () => {
     <div className="h-screen w-screen flex flex-col bg-gray-100 overflow-hidden">
       {/* Cart Drawer */}
       <CartDrawer />
+
+      {/* Proof Approval Modal */}
+      {proofDesigns && (
+        <>
+          <div className="fixed inset-0 bg-black/60 z-50" onClick={() => setProofDesigns(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+              {/* Header */}
+              <div className="p-5 border-b border-gray-200 bg-gradient-to-r from-emerald-600 to-teal-600">
+                <h2 className="text-xl font-bold text-white">Review Your Order</h2>
+                <p className="text-emerald-100 text-sm mt-0.5">Please confirm your design(s) before adding to cart</p>
+              </div>
+
+              {/* Sheets */}
+              <div className="overflow-y-auto flex-1 p-5 space-y-4">
+                {proofDesigns.map((design, i) => (
+                  <div key={design.id} className="flex gap-4 bg-gray-50 rounded-xl p-4">
+                    {/* Thumbnail */}
+                    <div className="w-24 h-32 bg-white border border-gray-200 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
+                      {design.thumbnailUrl ? (
+                        <img src={design.thumbnailUrl} alt={design.name} className="w-full h-full object-contain" />
+                      ) : (
+                        <svg className="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      )}
+                    </div>
+                    {/* Details */}
+                    <div className="flex-1">
+                      <p className="font-semibold text-gray-800">
+                        {proofDesigns.length > 1 ? `Sheet ${i + 1}: ` : ''}{design.name}
+                      </p>
+                      <div className="mt-2 space-y-1 text-sm text-gray-600">
+                        <p>Size: <span className="font-medium">{design.boardSize.label}</span></p>
+                        <p>Images: <span className="font-medium">{design.imageCount}</span></p>
+                        <p>Quantity: <span className="font-medium">{quantity}</span></p>
+                      </div>
+                      <p className="mt-3 text-emerald-600 font-bold text-lg">
+                        ${(getPriceForBoard(design.boardSize.width, design.boardSize.height) * quantity).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Total */}
+                {proofDesigns.length > 1 && (
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                    <span className="font-semibold text-gray-700">Total</span>
+                    <span className="text-xl font-bold text-emerald-600">
+                      ${proofDesigns.reduce((sum, d) =>
+                        sum + getPriceForBoard(d.boardSize.width, d.boardSize.height) * quantity, 0
+                      ).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                <p className="text-xs text-gray-400 pt-1">
+                  By confirming, you agree that the design(s) above are correct. Changes cannot be made after checkout.
+                </p>
+              </div>
+
+              {/* Footer */}
+              <div className="p-4 border-t border-gray-200 bg-gray-50 flex gap-3 justify-end">
+                <button
+                  onClick={() => setProofDesigns(null)}
+                  className="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition-colors font-medium"
+                >
+                  ← Go Back & Edit
+                </button>
+                <button
+                  onClick={handleConfirmProof}
+                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Confirm & Add to Cart
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Top Header Bar */}
       <div className="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 shadow-sm">
