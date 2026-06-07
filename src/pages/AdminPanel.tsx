@@ -919,13 +919,13 @@ export const AdminPanel: React.FC = () => {
   };
 
   // Access gate: müşteri customerId ile geçer, admin key ile admin mode açılır
-  if (!isAuthenticated() && !adminMode) {
-    const isAdminAccess = new URLSearchParams(window.location.search).get('admin') === '1';
+  const isAdminAccess = new URLSearchParams(window.location.search).get('admin') === '1';
+
+  if ((!isAuthenticated() && !adminMode) || (isAdminAccess && !adminMode)) {
 
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl w-full p-8" style={{ maxWidth: isAdminAccess ? 420 : 380 }}>
-          {/* Logo */}
           <div className="text-center mb-8">
             <img src="/gangflow-logo.svg" alt="GangFlow" className="w-16 h-16 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-800">GangFlow</h2>
