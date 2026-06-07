@@ -271,8 +271,18 @@ router.post('/orders', async (req, res) => {
     }
 
     const key = `users/${customerId}/orders/${order.id}.json`;
-    const { canvasData, assetsData, items, ...lightOrder } = order;
-    const orderToSave = shopDomain ? { ...lightOrder, shopDomain } : lightOrder;
+    // Strip heavy base64 fields from root and from each item's design — keep items array
+    const { canvasData, assetsData, ...withItems } = order;
+    const lightItems = (order.items ?? []).map(item => {
+      if (!item?.design) return item;
+      const { canvasData: _c, assetsData: _a, thumbnailUrl, fullExportUrl, ...lightDesign } = item.design;
+      // Only keep URLs that are real presigned URLs, not base64 blobs
+      if (thumbnailUrl && !thumbnailUrl.startsWith('data:')) lightDesign.thumbnailUrl = thumbnailUrl;
+      if (fullExportUrl && !fullExportUrl.startsWith('data:')) lightDesign.fullExportUrl = fullExportUrl;
+      return { ...item, design: lightDesign };
+    });
+    const orderToSave = { ...withItems, items: lightItems };
+    if (shopDomain) orderToSave.shopDomain = shopDomain;
 
     await s3Client.send(new PutObjectCommand({
       Bucket: BUCKET_NAME,
@@ -640,6 +650,32 @@ router.get('/admin/designs', requireAdminKey, async (req, res) => {
 });
 
 // ==================== ADMIN CRUD ====================
+
+// Admin: rename any customer's design
+router.patch('/admin/designs/:customerId/:designId/name', requireAdminKey, async (req, res) => {
+  try {
+    const { customerId, designId } = req.params;
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'name is required' });
+
+    const key = `users/${customerId}/designs/${designId}.json`;
+    const getResponse = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key }));
+    const design = JSON.parse(await streamToString(getResponse.Body));
+
+    design.name = name.trim();
+    design.updatedAt = new Date().toISOString();
+
+    await s3Client.send(new PutObjectCommand({
+      Bucket: BUCKET_NAME, Key: key,
+      Body: JSON.stringify(design), ContentType: 'application/json',
+    }));
+
+    res.json({ success: true, designId, name: design.name });
+  } catch (error) {
+    console.error('Error renaming design (admin):', error);
+    res.status(500).json({ error: 'Failed to rename design', message: error.message });
+  }
+});
 
 // Admin: update any customer's order status
 router.patch('/admin/orders/:customerId/:orderId/status', requireAdminKey, async (req, res) => {

@@ -719,8 +719,26 @@ export const AdminPanel: React.FC = () => {
   };
 
   // Handle save design name
-  const handleSaveDesignName = (id: string, name: string) => {
-    updateDesign(id, { name });
+  const handleSaveDesignName = async (id: string, name: string) => {
+    if (adminMode) {
+      const design = adminDesigns.find(d => d.id === id);
+      if (!design?.customerId) return;
+      const key = sessionStorage.getItem('gang-sheet-admin-key')!;
+      const apiBase = import.meta.env.VITE_BACKEND_URL || 'https://gang-sheet-backend.onrender.com';
+      try {
+        const res = await fetch(`${apiBase}/api/storage/admin/designs/${design.customerId}/${id}/name`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key },
+          body: JSON.stringify({ name }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setAdminDesigns(prev => prev.map(d => d.id === id ? { ...d, name } : d));
+      } catch (e) {
+        alert(`❌ İsim güncellenemedi: ${e instanceof Error ? e.message : e}`);
+      }
+    } else {
+      updateDesign(id, { name });
+    }
   };
 
   // Confirm delete
