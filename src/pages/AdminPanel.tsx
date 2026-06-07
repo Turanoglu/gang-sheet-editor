@@ -921,66 +921,67 @@ export const AdminPanel: React.FC = () => {
 
   // Access gate: müşteri customerId ile geçer, admin key ile admin mode açılır
   if (!isAuthenticated() && !adminMode) {
+    const isAdminAccess = new URLSearchParams(window.location.search).get('admin') === '1';
+
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-8">
-          <div className="text-center mb-6">
-            <img src="/gangflow-logo.svg" alt="GangFlow" className="w-14 h-14 mx-auto mb-3" />
-            <h2 className="text-xl font-bold text-gray-800">GangFlow Panel</h2>
+        <div className="bg-white rounded-2xl shadow-xl w-full p-8" style={{ maxWidth: isAdminAccess ? 420 : 380 }}>
+          {/* Logo */}
+          <div className="text-center mb-8">
+            <img src="/gangflow-logo.svg" alt="GangFlow" className="w-16 h-16 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-800">GangFlow</h2>
+            <p className="text-gray-500 text-sm mt-1">
+              {isAdminAccess ? 'Admin Paneli' : 'DTF Gang Sheet Editor'}
+            </p>
           </div>
 
-          {/* İki seçenek yan yana */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Müşteri girişi */}
-            <div className="border border-gray-200 rounded-xl p-5">
-              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mb-3">
-                <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-              <h3 className="font-semibold text-gray-800 mb-1 text-sm">Müşteri Girişi</h3>
-              <p className="text-xs text-gray-500 mb-4">Kendi tasarımlarınızı ve siparişlerinizi görüntüleyin.</p>
-              <a
-                href={SHOPIFY_STORE_URL}
-                className="block w-full text-center py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
-              >
-                Shopify'dan Giriş Yap
-              </a>
-            </div>
-
-            {/* Admin girişi */}
-            <div className="border border-purple-200 rounded-xl p-5 bg-purple-50/30">
-              <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mb-3">
-                <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                </svg>
-              </div>
-              <h3 className="font-semibold text-gray-800 mb-1 text-sm">Admin Girişi</h3>
-              <p className="text-xs text-gray-500 mb-3">Tüm müşteri verilerine erişin.</p>
+          {isAdminAccess ? (
+            /* Admin şifre formu — sadece ?admin=1 ile erişilince görünür */
+            <div className="space-y-3">
               <input
                 type="password"
                 value={adminKeyInput}
                 onChange={(e) => setAdminKeyInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
-                placeholder="Admin şifresi..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs
-                           focus:outline-none focus:ring-2 focus:ring-purple-500 mb-2"
+                placeholder="Admin şifresi"
+                autoFocus
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+                           focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
               />
               {adminLoginError && (
-                <p className={`text-xs mb-2 ${adminLoginError.includes('uyanıyor') ? 'text-amber-600' : 'text-red-600'}`}>
+                <p className={`text-xs px-1 ${adminLoginError.includes('uyanıyor') ? 'text-amber-600' : 'text-red-600'}`}>
                   {adminLoginError}
                 </p>
               )}
               <button
                 onClick={handleAdminLogin}
                 disabled={adminLoading || !adminKeyInput.trim()}
-                className="w-full py-2 text-sm bg-purple-600 hover:bg-purple-700 text-white rounded-lg
-                           transition-colors disabled:opacity-50"
+                className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl
+                           font-semibold transition-colors disabled:opacity-50"
               >
-                {adminLoading ? 'Giriş...' : 'Giriş Yap'}
+                {adminLoading ? 'Giriş yapılıyor...' : 'Giriş Yap'}
               </button>
             </div>
-          </div>
+          ) : (
+            /* Müşteri — Shopify'a yönlendir */
+            <div className="space-y-4 text-center">
+              <p className="text-sm text-gray-500">
+                Siparişlerinizi görüntülemek için editörü Shopify mağazamız üzerinden açın ve
+                <strong> Siparişlerim</strong> butonuna tıklayın.
+              </p>
+              <a
+                href={SHOPIFY_STORE_URL}
+                className="flex items-center justify-center gap-2 w-full py-3 bg-blue-600
+                           hover:bg-blue-700 text-white rounded-xl font-semibold transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                inkdyno.com'a Git
+              </a>
+            </div>
+          )}
         </div>
       </div>
     );
