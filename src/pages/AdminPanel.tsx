@@ -445,7 +445,7 @@ const EditNameModal: React.FC<{
   );
 };
 
-export const AdminPanel: React.FC = () => {
+export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdminAccess = false }) => {
   const navigate = useNavigate();
   const {
     orders: myOrders,
@@ -919,7 +919,7 @@ export const AdminPanel: React.FC = () => {
   };
 
   // Access gate: müşteri customerId ile geçer, admin key ile admin mode açılır
-  const isAdminAccess = new URLSearchParams(window.location.search).get('admin') === '1';
+  const isAdminAccess = forceAdminAccess || new URLSearchParams(window.location.search).get('admin') === '1';
 
   if ((!isAuthenticated() && !adminMode) || (isAdminAccess && !adminMode)) {
 

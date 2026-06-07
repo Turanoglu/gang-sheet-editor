@@ -68,6 +68,7 @@ function App() {
       <Routes>
         <Route path="/" element={<ShopifyAuthGate><EditorPage /></ShopifyAuthGate>} />
         <Route path="/admin" element={<ErrorBoundary><AdminPanel /></ErrorBoundary>} />
+        <Route path="/staff" element={<ErrorBoundary><AdminPanel forceAdminAccess /></ErrorBoundary>} />
       </Routes>
     </BrowserRouter>
   );
