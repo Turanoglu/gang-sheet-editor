@@ -176,6 +176,9 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
     const skippedReasons = [];
 
     for (const item of sorted) {
+      // Skip text items — they have no image asset
+      if (item.assetId === '__text__' || item.type === 'text') continue;
+
       const meta = assetsMetadata[item.assetId];
       if (!meta?.r2Key) {
         skippedReasons.push(`item ${item.id}: no r2Key for assetId ${item.assetId}`);
@@ -183,8 +186,20 @@ router.post('/render-tiff', requireAdminKey, async (req, res) => {
       }
 
       try {
-        const assetBuf = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: meta.r2Key }))
-          .then(r => streamToBuffer(r.Body));
+        // Try R2 key first, then fall back to viewUrl (presigned HTTP URL from assetsMetadata)
+        let assetBuf;
+        try {
+          assetBuf = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: meta.r2Key }))
+            .then(r => streamToBuffer(r.Body));
+        } catch (r2Err) {
+          if (meta.viewUrl && meta.viewUrl.startsWith('http')) {
+            const fetchRes = await fetch(meta.viewUrl);
+            if (!fetchRes.ok) throw new Error(`viewUrl fetch failed: ${fetchRes.status}`);
+            assetBuf = Buffer.from(await fetchRes.arrayBuffer());
+          } else {
+            throw r2Err;
+          }
+        }
 
         const tW = Math.max(1, Math.round(item.width  * scale));
         const tH = Math.max(1, Math.round(item.height * scale));

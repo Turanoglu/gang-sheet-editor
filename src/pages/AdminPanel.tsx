@@ -5,10 +5,12 @@ import { WelcomeDashboard } from '../components/Dashboard';
 import { EditorSettings, AdminSettings } from '../components/Settings';
 import { useCloudSync } from '../hooks';
 import type { OrderStatus, Order, GangSheetDesign } from '../types/order';
+import { jsPDF } from 'jspdf';
 import {
   getAdminOrdersFromCloud,
   getAdminDesignsFromCloud,
   updateAdminOrderStatus,
+  updateAdminOrderNotes,
   deleteAdminOrder,
   deleteAdminDesign,
   isAuthenticated,
@@ -141,8 +143,95 @@ const ViewModal: React.FC<{
 const OrderViewModal: React.FC<{
   order: Order | null;
   onClose: () => void;
-}> = ({ order, onClose }) => {
+  adminMode?: boolean;
+  adminKey?: string | null;
+  onNotesUpdated?: (orderId: string, notes: string) => void;
+}> = ({ order, onClose, adminMode, adminKey, onNotesUpdated }) => {
+  const [notes, setNotes] = useState(order?.notes || '');
+  const [notesSaving, setNotesSaving] = useState(false);
+
   if (!order) return null;
+
+  const handleSaveNotes = async () => {
+    if (!adminMode || !adminKey || !order.customerId) return;
+    setNotesSaving(true);
+    try {
+      await updateAdminOrderNotes(order.customerId, order.id, notes, adminKey);
+      onNotesUpdated?.(order.id, notes);
+    } catch (e) {
+      alert(`❌ Not kaydedilemedi: ${e instanceof Error ? e.message : e}`);
+    } finally {
+      setNotesSaving(false);
+    }
+  };
+
+  const handleGenerateInvoice = () => {
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const margin = 40;
+    let y = margin;
+
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text('INVOICE', margin, y);
+    y += 30;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Order: ${order.orderNumber}`, margin, y);
+    y += 16;
+    doc.text(`Date: ${new Date(order.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, margin, y);
+    y += 16;
+    doc.text(`Customer: ${order.customerName}`, margin, y);
+    y += 16;
+    if (order.customerEmail) {
+      doc.text(`Email: ${order.customerEmail}`, margin, y);
+      y += 16;
+    }
+    y += 10;
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('Item', margin, y);
+    doc.text('Board Size', 280, y);
+    doc.text('Qty', 380, y);
+    doc.text('Price', 450, y);
+    doc.text('Total', 510, y);
+    y += 4;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(margin, y, 555, y);
+    y += 14;
+
+    doc.setFont('helvetica', 'normal');
+    for (const item of (order.items ?? [])) {
+      const name = item.design?.name || '-';
+      const size = item.design?.boardSize?.label || '-';
+      const line = doc.splitTextToSize(name, 220);
+      doc.text(line, margin, y);
+      doc.text(size, 280, y);
+      doc.text(String(item.quantity), 380, y);
+      doc.text(`$${item.pricePerUnit.toFixed(2)}`, 450, y);
+      doc.text(`$${(item.pricePerUnit * item.quantity).toFixed(2)}`, 510, y);
+      y += line.length > 1 ? line.length * 14 : 18;
+    }
+
+    y += 8;
+    doc.line(margin, y, 555, y);
+    y += 16;
+    doc.setFont('helvetica', 'bold');
+    doc.text('TOTAL', 450, y);
+    doc.text(`$${order.totalAmount.toFixed(2)}`, 510, y);
+
+    if (notes) {
+      y += 30;
+      doc.setFont('helvetica', 'bold');
+      doc.text('Notes:', margin, y);
+      y += 14;
+      doc.setFont('helvetica', 'normal');
+      const noteLines = doc.splitTextToSize(notes, 515);
+      doc.text(noteLines, margin, y);
+    }
+
+    doc.save(`Invoice_${order.orderNumber}.pdf`);
+  };
 
   return (
     <>
@@ -238,8 +327,41 @@ const OrderViewModal: React.FC<{
             </div>
           </div>
 
+          {/* Admin Notes */}
+          {adminMode && (
+            <div className="px-6 pb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Admin Notes</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-none
+                           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Internal notes visible only to admins..."
+              />
+              <button
+                onClick={handleSaveNotes}
+                disabled={notesSaving}
+                className="mt-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg
+                           transition-colors disabled:opacity-50"
+              >
+                {notesSaving ? 'Saving...' : 'Save Notes'}
+              </button>
+            </div>
+          )}
+
           {/* Footer */}
-          <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
+          <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+            <button
+              onClick={handleGenerateInvoice}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Download Invoice PDF
+            </button>
             <button
               onClick={onClose}
               className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded-lg transition-colors"
@@ -474,6 +596,29 @@ export const AdminPanel: React.FC = () => {
     } catch (e) {
       alert('Hata: ' + e);
     }
+  };
+
+  // Bulk design selection (for bulk TIFF download)
+  const [selectedDesignIds, setSelectedDesignIds] = useState<Set<string>>(new Set());
+  const [bulkTiffDownloading, setBulkTiffDownloading] = useState(false);
+
+  const toggleDesignSelect = (id: string) =>
+    setSelectedDesignIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const handleBulkDownloadTiff = async () => {
+    const ids = [...selectedDesignIds];
+    if (ids.length === 0) return;
+    setBulkTiffDownloading(true);
+    for (const id of ids) {
+      const design = adminDesigns.find(d => d.id === id);
+      if (design) await handleDownloadDesign(design, 'tiff');
+    }
+    setBulkTiffDownloading(false);
+    setSelectedDesignIds(new Set());
   };
 
   // Modal states
@@ -845,7 +990,15 @@ export const AdminPanel: React.FC = () => {
     <div className="h-screen bg-gray-50 flex overflow-hidden">
       {/* Modals */}
       <ViewModal design={viewDesign} onClose={() => setViewDesign(null)} />
-      <OrderViewModal order={viewOrder} onClose={() => setViewOrder(null)} />
+      <OrderViewModal
+        order={viewOrder}
+        onClose={() => setViewOrder(null)}
+        adminMode={adminMode}
+        adminKey={sessionStorage.getItem('gang-sheet-admin-key')}
+        onNotesUpdated={(orderId, updatedNotes) =>
+          setAdminOrders(prev => prev.map(o => o.id === orderId ? { ...o, notes: updatedNotes } : o))
+        }
+      />
       <EditNameModal
         design={editDesign}
         onClose={() => setEditDesign(null)}
@@ -1186,22 +1339,38 @@ export const AdminPanel: React.FC = () => {
                     </button>
                   ))}
                 </div>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Search"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm 
-                               focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <svg 
-                    className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"
-                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
+                <div className="flex items-center gap-2">
+                  {adminMode && sidebarView === 'Designs' && selectedDesignIds.size > 0 && (
+                    <button
+                      onClick={handleBulkDownloadTiff}
+                      disabled={bulkTiffDownloading}
+                      className="flex items-center gap-1.5 px-3 py-2 bg-purple-600 hover:bg-purple-700
+                                 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      {bulkTiffDownloading ? 'Downloading...' : `TIFF (${selectedDesignIds.size})`}
+                    </button>
+                  )}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm
+                                 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <svg
+                      className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1249,6 +1418,8 @@ export const AdminPanel: React.FC = () => {
                           key={design.id}
                           design={design}
                           adminMode={adminMode}
+                          isSelected={selectedDesignIds.has(design.id)}
+                          onToggleSelect={() => toggleDesignSelect(design.id)}
                           onView={() => setViewDesign(design)}
                           onEdit={() => setEditDesign(design)}
                           onEditInBuilder={() => handleEditDesign(design)}
@@ -1355,6 +1526,8 @@ export const AdminPanel: React.FC = () => {
 const DesignRow: React.FC<{
   design: GangSheetDesign;
   adminMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
   onView: () => void;
   onEdit: () => void;
   onEditInBuilder: () => void;
@@ -1364,10 +1537,18 @@ const DesignRow: React.FC<{
   tiffStatus?: string;
   onDelete: () => void;
   formatDate: (date: Date | string) => string;
-}> = ({ design, adminMode, onView, onEdit, onEditInBuilder, onDownload, onDownloadTiff, isTiffDownloading, tiffStatus, onDelete, formatDate }) => (
-  <tr className="hover:bg-gray-50">
+}> = ({ design, adminMode, isSelected, onToggleSelect, onView, onEdit, onEditInBuilder, onDownload, onDownloadTiff, isTiffDownloading, tiffStatus, onDelete, formatDate }) => (
+  <tr className={`hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}>
     <td className="px-4 py-3 max-w-[260px]">
       <div className="flex items-center gap-2 min-w-0">
+        {adminMode && (
+          <input
+            type="checkbox"
+            checked={isSelected ?? false}
+            onChange={onToggleSelect}
+            className="w-4 h-4 text-blue-600 rounded border-gray-300 cursor-pointer flex-shrink-0"
+          />
+        )}
         {/* Thumbnail preview */}
         <div className="w-12 h-16 bg-gray-100 rounded overflow-hidden flex-shrink-0 border border-gray-200">
           {design.thumbnailUrl ? (
@@ -1492,7 +1673,12 @@ const OrderRow: React.FC<{
       </div>
     </td>
     <td className="px-4 py-3 text-gray-700 font-mono text-sm">{order.orderNumber}</td>
-    <td className="px-4 py-3 text-gray-700">{order.customerName}</td>
+    <td className="px-4 py-3">
+      <span className="text-gray-700 block">{order.customerName}</span>
+      {order.customerEmail && (
+        <span className="text-xs text-gray-400">{order.customerEmail}</span>
+      )}
+    </td>
     <td className="px-4 py-3">
       <button onClick={onView} className="text-blue-600 hover:underline">
         View Order...

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { sendStatusEmail } = require('./email');
 const {
   S3Client,
   PutObjectCommand,
@@ -696,10 +697,38 @@ router.patch('/admin/orders/:customerId/:orderId/status', requireAdminKey, async
       Body: JSON.stringify(order), ContentType: 'application/json',
     }));
 
+    // Fire-and-forget email notification
+    sendStatusEmail(order, status);
+
     res.json({ success: true, order });
   } catch (error) {
     console.error('Error updating order status (admin):', error);
     res.status(500).json({ error: 'Failed to update order status', message: error.message });
+  }
+});
+
+// Admin: update notes on any customer's order
+router.patch('/admin/orders/:customerId/:orderId/notes', requireAdminKey, async (req, res) => {
+  try {
+    const { customerId, orderId } = req.params;
+    const { notes } = req.body;
+    const key = `users/${customerId}/orders/${orderId}.json`;
+
+    const getResponse = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key }));
+    const order = JSON.parse(await streamToString(getResponse.Body));
+
+    order.notes = (notes || '').trim();
+    order.updatedAt = new Date().toISOString();
+
+    await s3Client.send(new PutObjectCommand({
+      Bucket: BUCKET_NAME, Key: key,
+      Body: JSON.stringify(order), ContentType: 'application/json',
+    }));
+
+    res.json({ success: true, orderId, notes: order.notes });
+  } catch (error) {
+    console.error('Error updating order notes (admin):', error);
+    res.status(500).json({ error: 'Failed to update notes', message: error.message });
   }
 });
 

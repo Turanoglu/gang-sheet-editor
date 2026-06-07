@@ -393,6 +393,20 @@ export async function updateAdminOrderStatus(
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
 }
 
+export async function updateAdminOrderNotes(
+  customerId: string, orderId: string, notes: string, adminKey: string
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/storage/admin/orders/${customerId}/${orderId}/notes`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+      body: JSON.stringify({ notes }),
+    }
+  );
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
 export async function deleteAdminOrder(
   customerId: string, orderId: string, adminKey: string
 ): Promise<void> {

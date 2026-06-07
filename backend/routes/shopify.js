@@ -114,6 +114,63 @@ router.post(
   }
 );
 
+// Mark orders as Cancelled for a given customer
+const markOrdersAsCancelled = async (customerId) => {
+  const prefix = `users/${customerId}/orders/`;
+  const listResponse = await s3Client.send(new ListObjectsV2Command({
+    Bucket: BUCKET_NAME, Prefix: prefix,
+  }));
+  const keys = (listResponse.Contents || []).filter(o => o.Key.endsWith('.json'));
+  let updated = 0;
+  for (const obj of keys) {
+    try {
+      const getRes = await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: obj.Key }));
+      const order = JSON.parse(await streamToString(getRes.Body));
+      // Cancel any active order (not already completed/cancelled)
+      if (!['Completed', 'Cancelled'].includes(order.status)) {
+        order.status = 'Cancelled';
+        order.updatedAt = new Date().toISOString();
+        await s3Client.send(new PutObjectCommand({
+          Bucket: BUCKET_NAME, Key: obj.Key,
+          Body: JSON.stringify(order), ContentType: 'application/json',
+        }));
+        updated++;
+        console.log(`Webhook: order ${order.id} → Cancelled (customer ${customerId})`);
+      }
+    } catch (e) {
+      console.error(`Webhook: failed to cancel order ${obj.Key}:`, e.message);
+    }
+  }
+  return updated;
+};
+
+// Shared handler factory for cancel/refund webhooks
+const makeCancelHandler = (eventName) => [
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+    const hmacHeader = req.headers['x-shopify-hmac-sha256'];
+    if (!hmacHeader || !verifyShopifyWebhook(req.body, hmacHeader)) {
+      return res.status(401).json({ error: 'HMAC verification failed' });
+    }
+    res.status(200).json({ received: true });
+    try {
+      const payload = JSON.parse(req.body.toString());
+      const customerId = String(payload?.customer?.id || '');
+      if (!customerId) return;
+      const updated = await markOrdersAsCancelled(customerId);
+      console.log(`Shopify ${eventName} webhook: cancelled ${updated} order(s) for customer ${customerId}`);
+    } catch (err) {
+      console.error(`Shopify ${eventName} webhook error:`, err.message);
+    }
+  }
+];
+
+// POST /api/shopify/webhooks/orders-cancelled
+router.post('/webhooks/orders-cancelled', ...makeCancelHandler('orders/cancelled'));
+
+// POST /api/shopify/webhooks/orders-refunded
+router.post('/webhooks/orders-refunded', ...makeCancelHandler('orders/refunded'));
+
 router.get('/test', (req, res) => {
   res.json({ message: 'Shopify routes active', configured: true });
 });

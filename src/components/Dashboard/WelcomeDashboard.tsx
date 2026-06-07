@@ -173,6 +173,16 @@ export const WelcomeDashboard: React.FC<WelcomeDashboardProps> = ({ orders: prop
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 5);
 
+    // Board size popularity
+    const boardSizeCounts: Record<string, number> = {};
+    for (const d of designs) {
+      const label = d.boardSize.label || `${d.boardSize.width}"x${d.boardSize.height}"`;
+      boardSizeCounts[label] = (boardSizeCounts[label] || 0) + 1;
+    }
+    const topBoardSizes = Object.entries(boardSizeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5);
+
     return {
       totalSheets,
       totalOrders,
@@ -180,6 +190,7 @@ export const WelcomeDashboard: React.FC<WelcomeDashboardProps> = ({ orders: prop
       ordersByStatus,
       recentDesigns,
       recentOrders,
+      topBoardSizes,
     };
   }, [orders, designs]);
 
@@ -359,6 +370,31 @@ export const WelcomeDashboard: React.FC<WelcomeDashboardProps> = ({ orders: prop
           )}
         </div>
       </div>
+
+      {/* Board Size Popularity */}
+      {stats.topBoardSizes.length > 0 && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 className="text-lg font-semibold text-gray-700 mb-4">Top Board Sizes</h3>
+          <div className="space-y-2">
+            {stats.topBoardSizes.map(([label, count]) => {
+              const maxCount = stats.topBoardSizes[0][1];
+              const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
+              return (
+                <div key={label} className="flex items-center gap-3">
+                  <span className="text-sm text-gray-600 w-28 flex-shrink-0">{label}</span>
+                  <div className="flex-1 bg-gray-100 rounded-full h-4 overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-800 w-8 text-right">{count}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
