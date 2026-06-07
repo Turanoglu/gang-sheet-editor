@@ -646,13 +646,16 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
 
     // 1. Expand items by quantity — one CanvasItem template per asset
     const assetTemplates = new Map<string, CanvasItem>();
+    const assetCounts = new Map<string, number>();
     items.forEach((item) => {
       if (!assetTemplates.has(item.assetId)) assetTemplates.set(item.assetId, item);
+      assetCounts.set(item.assetId, (assetCounts.get(item.assetId) ?? 0) + 1);
     });
 
     const toPlace: CanvasItem[] = [];
     assetTemplates.forEach((template, assetId) => {
-      const qty = itemQuantities[assetId] ?? 1;
+      // itemQuantities üstten ayarlandıysa onu kullan, yoksa canvas'taki gerçek sayıyı kullan
+      const qty = itemQuantities[assetId] != null ? itemQuantities[assetId] : (assetCounts.get(assetId) ?? 1);
       for (let i = 0; i < qty; i++) {
         toPlace.push({ ...template, id: i === 0 ? template.id : uuidv4() });
       }
