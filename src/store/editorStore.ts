@@ -57,6 +57,8 @@ const initialState: EditorState = {
   itemQuantities: {},
   hasOverflow: false,
   hasOverlap: false,
+  clipboard: [],
+  snapToGrid: false,
   // Multi-sheet
   sheets: [{ id: FIRST_SHEET_ID, label: 'Sheet 1', items: [], assets: {}, boardSize: BOARD_SIZES[1], itemQuantities: {} }],
   activeSheetId: FIRST_SHEET_ID,
@@ -1009,6 +1011,83 @@ export const useEditorStore = create<EditorStore>()((set, get) => ({
     } catch (err) {
       console.error('[loadDesign] fatal error:', err);
     }
+  },
+
+  // Nudge selected items
+  nudgeItems: (dx: number, dy: number) => {
+    const { selectedIds } = get();
+    if (selectedIds.length === 0) return;
+    set((state) => ({
+      items: state.items.map((item) =>
+        selectedIds.includes(item.id) ? { ...item, x: item.x + dx, y: item.y + dy } : item
+      ),
+    }));
+  },
+
+  // Clipboard
+  copyItems: () => {
+    const { selectedIds, items } = get();
+    if (selectedIds.length === 0) return;
+    const copied = items
+      .filter((i) => selectedIds.includes(i.id))
+      .map((i) => ({ ...i }));
+    set({ clipboard: copied });
+  },
+
+  pasteItems: () => {
+    const { clipboard, items } = get();
+    if (clipboard.length === 0) return;
+    get().pushToHistory();
+    const maxZIndex = Math.max(...items.map((i) => i.zIndex), 0);
+    const OFFSET = 20; // board pixels offset so paste is visible
+    const newItems = clipboard.map((item, idx) => ({
+      ...item,
+      id: uuidv4(),
+      x: item.x + OFFSET,
+      y: item.y + OFFSET,
+      zIndex: maxZIndex + idx + 1,
+    }));
+    set((state) => ({
+      items: [...state.items, ...newItems],
+      selectedIds: newItems.map((i) => i.id),
+    }));
+  },
+
+  // Add text item at board coordinate
+  addTextItem: (x: number, y: number) => {
+    const { items, dpi } = get();
+    get().pushToHistory();
+    const fontSize = Math.round(dpi * 0.5); // 0.5 inch font size default
+    const newItem: import('../types').CanvasItem = {
+      id: uuidv4(),
+      assetId: '__text__',
+      type: 'text',
+      x,
+      y,
+      width: Math.round(dpi * 3),   // 3 inch default width
+      height: Math.round(dpi * 0.8),
+      rotation: 0,
+      lockedAspect: false,
+      opacity: 1,
+      flipX: false,
+      flipY: false,
+      zIndex: Math.max(...items.map((i) => i.zIndex), 0) + 1,
+      text: 'Double-click to edit',
+      fontSize,
+      fontFamily: 'Arial',
+      fontStyle: 'normal',
+      textAlign: 'left',
+      fill: '#ffffff',
+    };
+    set((state) => ({
+      items: [...state.items, newItem],
+      selectedIds: [newItem.id],
+    }));
+  },
+
+  // Snap
+  toggleSnapToGrid: () => {
+    set((state) => ({ snapToGrid: !state.snapToGrid }));
   },
 
   // Position control - Move selected items to top of board

@@ -31,12 +31,18 @@ export const EditorPage: React.FC = () => {
   const [isPanning, setIsPanning] = useState(false);
   const panStartRef = useRef<{ x: number; y: number; scrollLeft: number; scrollTop: number } | null>(null);
 
+  // Text tool state
+  const [isTextToolActive, setIsTextToolActive] = useState(false);
+
   const {
     removeSelectedItems,
     selectedIds,
     duplicateSelectedItems,
     undo,
     redo,
+    nudgeItems,
+    copyItems,
+    pasteItems,
     boardSize,
     dpi,
     hasOverflow,
@@ -138,16 +144,18 @@ export const EditorPage: React.FC = () => {
   // Handle keyboard shortcuts
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      // Space → pan mode (ignore when typing in inputs)
-      if (e.code === 'Space' && !e.repeat &&
-          !(e.target instanceof HTMLInputElement) &&
-          !(e.target instanceof HTMLTextAreaElement)) {
+      const isTyping =
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement;
+
+      // Space → pan mode (ignore when typing)
+      if (e.code === 'Space' && !e.repeat && !isTyping) {
         e.preventDefault();
         setIsPanMode(true);
         return;
       }
 
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.length > 0) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIds.length > 0 && !isTyping) {
         e.preventDefault();
         removeSelectedItems();
       }
@@ -169,8 +177,31 @@ export const EditorPage: React.FC = () => {
         e.preventDefault();
         redo();
       }
+
+      // Ctrl+C / Ctrl+V
+      if ((e.ctrlKey || e.metaKey) && e.key === 'c' && !isTyping) {
+        copyItems();
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'v' && !isTyping) {
+        e.preventDefault();
+        pasteItems();
+      }
+
+      // Arrow key nudge — 1px board pixel, Shift = 10px (ignore when typing)
+      if (!isTyping && selectedIds.length > 0) {
+        const step = e.shiftKey ? 10 : 1;
+        if (e.key === 'ArrowLeft')  { e.preventDefault(); nudgeItems(-step, 0); }
+        if (e.key === 'ArrowRight') { e.preventDefault(); nudgeItems(step, 0); }
+        if (e.key === 'ArrowUp')    { e.preventDefault(); nudgeItems(0, -step); }
+        if (e.key === 'ArrowDown')  { e.preventDefault(); nudgeItems(0, step); }
+      }
+
+      // T → toggle text tool
+      if (e.key === 't' && !isTyping && !(e.ctrlKey || e.metaKey)) {
+        setIsTextToolActive(v => !v);
+      }
     },
-    [selectedIds, removeSelectedItems, duplicateSelectedItems, undo, redo]
+    [selectedIds, removeSelectedItems, duplicateSelectedItems, undo, redo, nudgeItems, copyItems, pasteItems, setIsTextToolActive]
   );
 
   const handleKeyUp = useCallback((e: KeyboardEvent) => {
@@ -449,7 +480,12 @@ export const EditorPage: React.FC = () => {
       </div>
 
       {/* Toolbar */}
-      <Toolbar isPanMode={isPanMode} onTogglePanMode={() => setIsPanMode(v => !v)} />
+      <Toolbar
+        isPanMode={isPanMode}
+        onTogglePanMode={() => setIsPanMode(v => !v)}
+        isTextToolActive={isTextToolActive}
+        onToggleTextTool={() => setIsTextToolActive(v => !v)}
+      />
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
@@ -536,6 +572,8 @@ export const EditorPage: React.FC = () => {
                     stageRef={stageRef}
                     displayScale={displayScale}
                     setDisplayScale={setDisplayScale}
+                    isTextToolActive={isTextToolActive}
+                    onTextToolPlaced={() => setIsTextToolActive(false)}
                   />
                   {/* Pan overlay: blocks Konva interactions while Space is held */}
                   {isPanMode && (

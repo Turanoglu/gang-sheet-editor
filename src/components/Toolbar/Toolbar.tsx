@@ -6,6 +6,8 @@ import { getCustomerId, getCustomerName, getCustomerEmail, getShopDomain } from 
 interface ToolbarProps {
   isPanMode?: boolean;
   onTogglePanMode?: () => void;
+  isTextToolActive?: boolean;
+  onToggleTextTool?: () => void;
 }
 
 // Icon Components
@@ -108,7 +110,26 @@ const MoveToBottomIcon = () => (
   </svg>
 );
 
-export const Toolbar: React.FC<ToolbarProps> = ({ isPanMode = false, onTogglePanMode }) => {
+// Icons for new features
+const TextIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 18h5M17.5 15.5v5" />
+  </svg>
+);
+
+const SnapIcon = () => (
+  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
+  </svg>
+);
+
+export const Toolbar: React.FC<ToolbarProps> = ({
+  isPanMode = false,
+  onTogglePanMode,
+  isTextToolActive = false,
+  onToggleTextTool,
+}) => {
   const {
     boardSize,
     setBoardSize,
@@ -133,6 +154,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({ isPanMode = false, onTogglePan
     alignItems,
     moveToTop,
     moveToBottom,
+    snapToGrid,
+    toggleSnapToGrid,
   } = useEditorStore();
 
   // Get selected items
@@ -200,17 +223,29 @@ export const Toolbar: React.FC<ToolbarProps> = ({ isPanMode = false, onTogglePan
       <div className="flex items-center gap-1 pr-3 border-r border-gray-200">
         <ToolButton
           icon={<HandIcon />}
-          title="Pan Tool — sürükleyerek kaydır (Space)"
+          title="Pan Tool — kaydır (Space)"
           onClick={onTogglePanMode}
           active={isPanMode}
         />
         <ToolButton
+          icon={<TextIcon />}
+          title="Metin Aracı — tıkla ve yaz (T)"
+          onClick={onToggleTextTool}
+          active={isTextToolActive}
+        />
+        <ToolButton
           icon={<GridIcon />}
-          title="Toggle Grid"
+          title="Izgarayı Göster/Gizle"
           onClick={toggleGrid}
           active={gridVisible}
         />
-        <ToolButton icon={<CopyIcon />} title="Duplicate" onClick={duplicateSelectedItems} disabled={!hasSelection} />
+        <ToolButton
+          icon={<SnapIcon />}
+          title="Izgaraya Yapış (Snap to Grid)"
+          onClick={toggleSnapToGrid}
+          active={snapToGrid}
+        />
+        <ToolButton icon={<CopyIcon />} title="Kopyala (Ctrl+D)" onClick={duplicateSelectedItems} disabled={!hasSelection} />
       </div>
 
       {/* Undo / Redo */}

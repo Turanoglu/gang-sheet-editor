@@ -388,12 +388,10 @@ export function loadImageFile(file: File): Promise<{
       const img = new Image();
 
       img.onload = () => {
-        resolve({
-          dataUrl,
-          imageEl: img,
-          width: img.naturalWidth,
-          height: img.naturalHeight,
-        });
+        // SVGs can report naturalWidth=0 if no viewBox/width attribute
+        const w = img.naturalWidth || 800;
+        const h = img.naturalHeight || 800;
+        resolve({ dataUrl, imageEl: img, width: w, height: h });
       };
 
       img.onerror = () => {

@@ -523,7 +523,7 @@ export const LeftSidebar: React.FC = () => {
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,.svg"
           multiple
           onChange={handleFileUpload}
           className="hidden"

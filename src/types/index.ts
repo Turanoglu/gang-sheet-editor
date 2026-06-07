@@ -61,10 +61,12 @@ export interface Asset {
   r2Key?: string; // R2 storage key — preserved when loaded from cloud so re-save skips re-upload
 }
 
-// Canvas item representing an image on the board
+// Canvas item representing an image or text on the board
 export interface CanvasItem {
   id: string;
-  assetId: string;
+  assetId: string; // '__text__' for text items
+  // Item type — defaults to 'image' for backward compat
+  type?: 'image' | 'text';
   // Position in pixels at 300 DPI (board coordinates)
   x: number;
   y: number;
@@ -81,6 +83,14 @@ export interface CanvasItem {
   flipY: boolean;
   // Z-index for layering
   zIndex: number;
+  // Text-specific fields (only for type === 'text')
+  text?: string;
+  fontSize?: number;       // in board pixels (at dpi)
+  fontFamily?: string;
+  fontStyle?: string;      // 'normal' | 'bold' | 'italic' | 'bold italic'
+  textAlign?: 'left' | 'center' | 'right';
+  fill?: string;           // CSS color string
+  locked?: boolean;        // item locked — cannot be moved/resized
 }
 
 // Auto fill settings
@@ -144,6 +154,12 @@ export interface EditorState {
 
   // Overlap warning
   hasOverlap: boolean;
+
+  // Clipboard (in-memory, not persisted)
+  clipboard: CanvasItem[];
+
+  // Snap to grid
+  snapToGrid: boolean;
 
   // Multi-sheet
   sheets: SheetData[];
@@ -217,6 +233,20 @@ export interface EditorActions {
   // Position control - move to board edges
   moveToTop: () => void;
   moveToBottom: () => void;
+
+  // Nudge selected items by dx/dy board pixels
+  nudgeItems: (dx: number, dy: number) => void;
+
+  // Clipboard
+  copyItems: () => void;
+  pasteItems: () => void;
+
+  // Text item
+  addTextItem: (x: number, y: number) => void;
+
+  // Snap
+  snapToGrid: boolean;
+  toggleSnapToGrid: () => void;
 
   // Multi-sheet
   addSheet: (thumbnailUrl?: string) => void;

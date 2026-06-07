@@ -260,6 +260,98 @@ export const PropertiesPanel: React.FC<{
         </div>
       </div>
 
+      {/* Selected Text Item Properties */}
+      {selectedItem && selectedItem.type === 'text' && (
+        <div className="p-4 bg-white border-b border-gray-200">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            Text Properties
+          </h3>
+          <div className="space-y-3">
+            {/* Text content */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Text</label>
+              <textarea
+                className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+                rows={2}
+                value={selectedItem.text ?? ''}
+                onChange={(e) => updateItem(selectedItem.id, { text: e.target.value })}
+              />
+            </div>
+            {/* Font family */}
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Font</label>
+              <select
+                className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                value={selectedItem.fontFamily ?? 'Arial'}
+                onChange={(e) => updateItem(selectedItem.id, { fontFamily: e.target.value })}
+              >
+                {['Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana', 'Impact', 'Comic Sans MS', 'Trebuchet MS'].map(f => (
+                  <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>
+                ))}
+              </select>
+            </div>
+            {/* Font size + color row */}
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="block text-xs text-gray-500 mb-1">Size (in)</label>
+                <input
+                  type="number" step="0.05" min="0.1" max="10"
+                  className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={parseFloat(((selectedItem.fontSize ?? dpi * 0.5) / dpi).toFixed(3))}
+                  onChange={(e) => updateItem(selectedItem.id, { fontSize: Math.round(parseFloat(e.target.value) * dpi) })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Color</label>
+                <input
+                  type="color"
+                  className="w-10 h-8 rounded cursor-pointer border border-gray-200"
+                  value={selectedItem.fill ?? '#ffffff'}
+                  onChange={(e) => updateItem(selectedItem.id, { fill: e.target.value })}
+                />
+              </div>
+            </div>
+            {/* Style + align row */}
+            <div className="flex gap-2 items-center">
+              <button
+                className={`px-2 py-1 text-xs font-bold rounded border transition-colors ${(selectedItem.fontStyle ?? '').includes('bold') ? 'bg-blue-500 text-white border-blue-500' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                onClick={() => {
+                  const cur = selectedItem.fontStyle ?? 'normal';
+                  const hasBold = cur.includes('bold');
+                  const hasItalic = cur.includes('italic');
+                  updateItem(selectedItem.id, { fontStyle: `${hasBold ? '' : 'bold'}${hasItalic ? ' italic' : ''}`.trim() || 'normal' });
+                }}
+              >B</button>
+              <button
+                className={`px-2 py-1 text-xs italic rounded border transition-colors ${(selectedItem.fontStyle ?? '').includes('italic') ? 'bg-blue-500 text-white border-blue-500' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                onClick={() => {
+                  const cur = selectedItem.fontStyle ?? 'normal';
+                  const hasBold = cur.includes('bold');
+                  const hasItalic = cur.includes('italic');
+                  updateItem(selectedItem.id, { fontStyle: `${hasBold ? 'bold' : ''}${hasItalic ? '' : ' italic'}`.trim() || 'normal' });
+                }}
+              >I</button>
+              <div className="flex border border-gray-200 rounded overflow-hidden ml-1">
+                {(['left', 'center', 'right'] as const).map(a => (
+                  <button
+                    key={a}
+                    className={`px-2 py-1 text-xs transition-colors ${(selectedItem.textAlign ?? 'left') === a ? 'bg-blue-500 text-white' : 'text-gray-600 hover:bg-gray-50'}`}
+                    onClick={() => updateItem(selectedItem.id, { textAlign: a })}
+                  >{a === 'left' ? '⇐' : a === 'center' ? '⇔' : '⇒'}</button>
+                ))}
+              </div>
+            </div>
+            {/* Position info */}
+            <div className="grid grid-cols-2 gap-2 text-xs text-gray-500">
+              <div>X: <span className="font-medium text-gray-700">{pxToInches(selectedItem.x, dpi).toFixed(2)}"</span></div>
+              <div>Y: <span className="font-medium text-gray-700">{pxToInches(selectedItem.y, dpi).toFixed(2)}"</span></div>
+              <div>W: <span className="font-medium text-gray-700">{pxToInches(selectedItem.width, dpi).toFixed(2)}"</span></div>
+              <div>R: <span className="font-medium text-gray-700">{selectedItem.rotation.toFixed(1)}°</span></div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Selected Image Info */}
       {selectedItem && selectedAsset && (
         <div className="p-4 bg-white border-b border-gray-200">
