@@ -80,13 +80,13 @@
       var iframe = document.getElementById('gang-sheet-wrapper');
 
       function showLoginOverlay() {
-        if (iframe) iframe.style.zIndex = '1';
+        if (iframe) iframe.style.setProperty('z-index', '1', 'important');
         overlay.style.display = 'flex';
       }
 
       function hideLoginOverlay() {
         overlay.style.display = 'none';
-        if (iframe) iframe.style.zIndex = '2147483647';
+        if (iframe) iframe.style.setProperty('z-index', '2147483647', 'important');
       }
 
       loginBtn.addEventListener('click', function() {
