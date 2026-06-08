@@ -114,49 +114,69 @@
   </script>
 
   <!-- Gang Sheet Checkout: editor'dan gelen postMessage'ı yakala, Shopify cart'a ekle -->
-  <!-- NOTE: Uses GET URL navigation — bypasses ALL JS interceptors (Kommo CRM, etc.) -->
   <script>
-    window.addEventListener('message', function(event) {
-      if (event.origin !== 'https://gang-sheet-editor.vercel.app') return;
-      if (!event.data || event.data.type !== 'gang-sheet-checkout') return;
+    (function() {
+      var isLoggedIn = {{ customer | json }} !== null;
 
-      var items = event.data.items;
-      if (!items || items.length === 0) return;
+      window.addEventListener('message', function(event) {
+        if (event.origin !== 'https://gang-sheet-editor.vercel.app') return;
+        if (!event.data || event.data.type !== 'gang-sheet-checkout') return;
 
-      try {
-        // GET navigation to /cart/add — no CSRF, no AJAX, browser handles cookies natively.
-        // For multiple items, chain: last item returns to /checkout,
-        // each earlier item returns to the next /cart/add URL.
-        var finalUrl = '/checkout';
+        var items = event.data.items;
+        if (!items || items.length === 0) return;
 
-        for (var i = items.length - 1; i >= 0; i--) {
-          var item = items[i];
-          var params = new URLSearchParams();
-          params.set('id', String(item.variantId));
-          params.set('quantity', String(item.quantity || 1));
+        try {
+          if (isLoggedIn) {
+            // Logged-in: GET chain → /checkout directly
+            var finalUrl = '/checkout';
+            for (var i = items.length - 1; i >= 0; i--) {
+              var item = items[i];
+              var params = new URLSearchParams();
+              params.set('id', String(item.variantId));
+              params.set('quantity', String(item.quantity || 1));
+              var props = item.properties || {};
+              Object.keys(props).forEach(function(key) {
+                params.set('properties[' + key + ']', String(props[key]));
+              });
+              params.set('return_to', finalUrl);
+              finalUrl = '/cart/add?' + params.toString();
+            }
+            fetch('/cart/clear.js', { method: 'POST' })
+              .catch(function() {})
+              .then(function() { window.location.href = finalUrl; });
 
-          var props = item.properties || {};
-          Object.keys(props).forEach(function(key) {
-            params.set('properties[' + key + ']', String(props[key]));
-          });
+          } else {
+            // Guest: add all items via API, then redirect to login → checkout
+            var cartItems = items.map(function(item) {
+              var props = {};
+              Object.keys(item.properties || {}).forEach(function(k) {
+                props[k] = String(item.properties[k]);
+              });
+              return { id: item.variantId, quantity: item.quantity || 1, properties: props };
+            });
+            fetch('/cart/clear.js', { method: 'POST' })
+              .catch(function() {})
+              .then(function() {
+                return fetch('/cart/add.js', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ items: cartItems })
+                });
+              })
+              .then(function() {
+                window.location.href = '/account/login?return_url=' + encodeURIComponent('/checkout');
+              })
+              .catch(function() {
+                window.location.href = '/account/login?return_url=' + encodeURIComponent('/checkout');
+              });
+          }
 
-          params.set('return_to', finalUrl);
-          finalUrl = '/cart/add?' + params.toString();
+        } catch (e) {
+          console.error('[GS] Checkout error:', e);
+          alert('Checkout failed: ' + e.message + '\n\nPlease try again or contact support.');
         }
-
-        // Clear existing Shopify cart first so previous sessions don't accumulate
-        fetch('/cart/clear.js', { method: 'POST' })
-          .catch(function() {}) // proceed even if clear fails
-          .then(function() {
-            console.log('[GS] Navigating to cart:', finalUrl);
-            window.location.href = finalUrl;
-          });
-
-      } catch (e) {
-        console.error('[GS] Checkout error:', e);
-        alert('Checkout failed: ' + e.message + '\n\nPlease try again or contact support.');
-      }
-    });
+      });
+    })();
   </script>
 
 </body>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useCartStore } from '../../store/cartStore';
 import { useOrderStore } from '../../store/orderStore';
 import { getVariantId, areVariantsConfigured } from '../../config/shopifyVariants';
-import { getCustomerName, isAuthenticated } from '../../services/storageAPI';
+import { getCustomerName } from '../../services/storageAPI';
 
 // Detect if the editor is embedded inside an iframe (e.g. inkdyno.com)
 const isEmbedded = (): boolean => {
@@ -32,34 +32,14 @@ const getParentOrigin = (): string => {
   return ALLOWED_PARENT_ORIGINS[0]; // default to primary store
 };
 
-const SHOPIFY_LOGIN_URL = 'https://www.inkdyno.com/account/login?return_url=%2Fpages%2Fgang-sheet-sample';
-
 export const CartDrawer: React.FC = () => {
   const { items, isOpen, closeCart, removeFromCart, updateQuantity, getTotal, clearCart } = useCartStore();
   const { createOrder, updateOrderStatus } = useOrderStore();
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutStatus, setCheckoutStatus] = useState<string>('');
-  const [needsLogin, setNeedsLogin] = useState(false);
-
-  const handleLoginRedirect = () => {
-    try {
-      (window.top || window).location.href = SHOPIFY_LOGIN_URL;
-    } catch {
-      window.location.href = SHOPIFY_LOGIN_URL;
-    }
-  };
 
   const handleCheckout = async () => {
     if (items.length === 0) return;
-
-    // If embedded in Shopify and customer not logged in, show login prompt inside the cart.
-    // Use isAuthenticated() — not getCustomerId() — because getCustomerId() always returns
-    // a non-null anonymous session ID, which would bypass this gate for guest users.
-    if (isEmbedded() && areVariantsConfigured() && !isAuthenticated()) {
-      setNeedsLogin(true);
-      return;
-    }
-    setNeedsLogin(false);
 
     setIsCheckingOut(true);
     setCheckoutStatus('Preparing order...');
@@ -280,21 +260,6 @@ export const CartDrawer: React.FC = () => {
                 ${getTotal().toFixed(2)}
               </span>
             </div>
-
-            {/* Login required banner */}
-            {needsLogin && (
-              <div className="mb-3 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
-                <p className="text-sm text-amber-800 font-medium mb-2">
-                  🔒 Please sign in to complete your order
-                </p>
-                <button
-                  onClick={handleLoginRedirect}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-semibold transition-colors"
-                >
-                  Sign In to Checkout
-                </button>
-              </div>
-            )}
 
             {/* Checkout Button */}
             <button
