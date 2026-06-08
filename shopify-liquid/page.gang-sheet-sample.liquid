@@ -77,12 +77,16 @@
       var cancelBtn = document.getElementById('gs-login-cancel');
       var loginPopup = null;
 
+      var iframe = document.getElementById('gang-sheet-wrapper');
+
       function showLoginOverlay() {
+        if (iframe) iframe.style.zIndex = '1';
         overlay.style.display = 'flex';
       }
 
       function hideLoginOverlay() {
         overlay.style.display = 'none';
+        if (iframe) iframe.style.zIndex = '2147483647';
       }
 
       loginBtn.addEventListener('click', function() {
