@@ -13,9 +13,9 @@ jobs:
       - name: Ping backend health endpoint
         run: |
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            --max-time 30 \
-            https://gang-sheet-backend.onrender.com/health)
+            --max-time 90 \
+            https://gang-sheet-backend.onrender.com/health) || true
           echo "Backend responded with HTTP $STATUS"
           if [ "$STATUS" != "200" ]; then
-            echo "Warning: backend returned $STATUS"
+            echo "Warning: backend returned $STATUS (may be waking up)"
           fi
