@@ -536,25 +536,37 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
     setAdminLoading(true);
     setAdminLoginError('');
 
-    const MAX_RETRIES = 4;
-    const RETRY_DELAY = 8000;
+    const MAX_RETRIES = 5;
+    const ATTEMPT_TIMEOUT = 20000; // 20s per attempt — fail fast, then retry
+    const RETRY_DELAY = 3000;      // 3s between retries
+
+    const fetchWithTimeout = async (fn: () => Promise<unknown>) => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT);
+      try {
+        return await fn();
+      } finally {
+        clearTimeout(timer);
+      }
+    };
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         const [fetchedOrders, fetchedDesigns] = await Promise.all([
-          getAdminOrdersFromCloud(adminKeyInput),
-          getAdminDesignsFromCloud(adminKeyInput),
+          fetchWithTimeout(() => getAdminOrdersFromCloud(adminKeyInput)),
+          fetchWithTimeout(() => getAdminDesignsFromCloud(adminKeyInput)),
         ]);
         sessionStorage.setItem('gang-sheet-admin-key', adminKeyInput);
-        setAdminOrders(fetchedOrders);
-        setAdminDesigns(fetchedDesigns);
+        setAdminOrders(fetchedOrders as Order[]);
+        setAdminDesigns(fetchedDesigns as GangSheetDesign[]);
         setAdminMode(true);
         setAdminKeyInput('');
         setAdminLoading(false);
         return;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        const isNetwork = msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.toLowerCase().includes('fetch');
+        const isAbort = err instanceof Error && err.name === 'AbortError';
+        const isNetwork = isAbort || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.toLowerCase().includes('fetch');
 
         if (!isNetwork || attempt === MAX_RETRIES) {
           if (msg === 'Unauthorized') {
@@ -568,7 +580,7 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
           return;
         }
 
-        setAdminLoginError(`Backend uyanıyor, bekleniyor... (${attempt}/${MAX_RETRIES - 1})`);
+        setAdminLoginError(`Sunucu uyanıyor, bekleniyor... (${attempt}/${MAX_RETRIES})`);
         await new Promise(res => setTimeout(res, RETRY_DELAY));
       }
     }
