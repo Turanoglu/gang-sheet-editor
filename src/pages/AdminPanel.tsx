@@ -534,61 +534,62 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
   const handleAdminLogin = async () => {
     if (!adminKeyInput.trim()) return;
     setAdminLoading(true);
-    setAdminLoginError('Sunucuya bağlanılıyor...');
+    setAdminLoginError('');
 
     const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
-    const WAKE_TIMEOUT = 70000;  // Render cold start max ~60s
-    const LOGIN_TIMEOUT = 15000; // backend uyanıkken 15s yeterli
-    const MAX_LOGIN_RETRIES = 3;
+    const MAX_WAKE_MS = 90000;   // max 90s total wake-up wait
+    const PING_TIMEOUT = 6000;   // each ping aborts after 6s
+    const PING_INTERVAL = 1000;  // 1s gap between pings
 
-    // Step 1: Wake up the backend with a ping, wait up to 70s
-    try {
-      const wakeController = new AbortController();
-      const wakeTimer = setTimeout(() => wakeController.abort(), WAKE_TIMEOUT);
+    // Step 1: Ping /health every few seconds until it responds (or timeout)
+    const wakeStart = Date.now();
+    let serverAwake = false;
+    let pingCount = 0;
+
+    while (!serverAwake && Date.now() - wakeStart < MAX_WAKE_MS) {
+      pingCount++;
+      setAdminLoginError(`Sunucu uyanıyor... (${pingCount})`);
       try {
-        await fetch(`${API_BASE}/health`, { signal: wakeController.signal });
-      } finally {
-        clearTimeout(wakeTimer);
-      }
-    } catch {
-      // Ignore — even if health check fails or times out, try login anyway
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), PING_TIMEOUT);
+        const res = await fetch(`${API_BASE}/health`, { signal: ctrl.signal });
+        clearTimeout(t);
+        if (res.ok) { serverAwake = true; break; }
+      } catch { /* still waking, retry */ }
+      await new Promise(r => setTimeout(r, PING_INTERVAL));
     }
 
-    // Step 2: Login with a short timeout (backend should be awake now)
+    if (!serverAwake) {
+      setAdminLoginError('Sunucuya ulaşılamıyor. Lütfen tekrar deneyin.');
+      setAdminLoading(false);
+      return;
+    }
+
+    // Step 2: Server is awake — login immediately
     setAdminLoginError('Giriş yapılıyor...');
-    for (let attempt = 1; attempt <= MAX_LOGIN_RETRIES; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), LOGIN_TIMEOUT);
-      try {
-        const [fetchedOrders, fetchedDesigns] = await Promise.all([
-          getAdminOrdersFromCloud(adminKeyInput, undefined, controller.signal),
-          getAdminDesignsFromCloud(adminKeyInput, undefined, controller.signal),
-        ]);
-        clearTimeout(timer);
-        sessionStorage.setItem('gang-sheet-admin-key', adminKeyInput);
-        setAdminOrders(fetchedOrders);
-        setAdminDesigns(fetchedDesigns);
-        setAdminMode(true);
-        setAdminKeyInput('');
-        setAdminLoading(false);
-        setAdminLoginError('');
-        return;
-      } catch (err) {
-        clearTimeout(timer);
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg === 'Unauthorized') {
-          setAdminLoginError('Geçersiz admin şifresi. Tekrar deneyin.');
-          setAdminLoading(false);
-          return;
-        }
-        if (attempt === MAX_LOGIN_RETRIES) {
-          setAdminLoginError('Backend\'e ulaşılamıyor. Render.com\'dan manuel uyandır ve tekrar dene.');
-          setAdminLoading(false);
-          return;
-        }
-        setAdminLoginError(`Bağlantı hatası, tekrar deneniyor... (${attempt}/${MAX_LOGIN_RETRIES})`);
-        await new Promise(res => setTimeout(res, 2000));
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 15000);
+      const [fetchedOrders, fetchedDesigns] = await Promise.all([
+        getAdminOrdersFromCloud(adminKeyInput, undefined, ctrl.signal),
+        getAdminDesignsFromCloud(adminKeyInput, undefined, ctrl.signal),
+      ]);
+      clearTimeout(t);
+      sessionStorage.setItem('gang-sheet-admin-key', adminKeyInput);
+      setAdminOrders(fetchedOrders);
+      setAdminDesigns(fetchedDesigns);
+      setAdminMode(true);
+      setAdminKeyInput('');
+      setAdminLoginError('');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg === 'Unauthorized') {
+        setAdminLoginError('Geçersiz admin şifresi. Tekrar deneyin.');
+      } else {
+        setAdminLoginError('Giriş başarısız. Lütfen tekrar deneyin.');
       }
+    } finally {
+      setAdminLoading(false);
     }
   };
 
