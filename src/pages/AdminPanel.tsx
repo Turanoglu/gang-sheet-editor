@@ -569,7 +569,7 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
     setAdminLoginError('Giriş yapılıyor...');
     try {
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 15000);
+      const t = setTimeout(() => ctrl.abort(), 30000);
       const [fetchedOrders, fetchedDesigns] = await Promise.all([
         getAdminOrdersFromCloud(adminKeyInput, undefined, ctrl.signal),
         getAdminDesignsFromCloud(adminKeyInput, undefined, ctrl.signal),
@@ -583,10 +583,13 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
       setAdminLoginError('');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      const name = err instanceof Error ? err.name : '';
       if (msg === 'Unauthorized') {
         setAdminLoginError('Geçersiz admin şifresi. Tekrar deneyin.');
+      } else if (name === 'AbortError') {
+        setAdminLoginError('Zaman aşımı. Sunucu yavaş cevap veriyor, tekrar deneyin.');
       } else {
-        setAdminLoginError('Giriş başarısız. Lütfen tekrar deneyin.');
+        setAdminLoginError(`Hata: ${msg}`);
       }
     } finally {
       setAdminLoading(false);
