@@ -534,54 +534,60 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
   const handleAdminLogin = async () => {
     if (!adminKeyInput.trim()) return;
     setAdminLoading(true);
-    setAdminLoginError('');
+    setAdminLoginError('Sunucuya bağlanılıyor...');
 
-    const MAX_RETRIES = 5;
-    const ATTEMPT_TIMEOUT = 20000; // 20s per attempt — fail fast, then retry
-    const RETRY_DELAY = 3000;      // 3s between retries
+    const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
+    const WAKE_TIMEOUT = 70000;  // Render cold start max ~60s
+    const LOGIN_TIMEOUT = 15000; // backend uyanıkken 15s yeterli
+    const MAX_LOGIN_RETRIES = 3;
 
-    const fetchWithTimeout = async (fn: () => Promise<unknown>) => {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), ATTEMPT_TIMEOUT);
+    // Step 1: Wake up the backend with a ping, wait up to 70s
+    try {
+      const wakeController = new AbortController();
+      const wakeTimer = setTimeout(() => wakeController.abort(), WAKE_TIMEOUT);
       try {
-        return await fn();
+        await fetch(`${API_BASE}/health`, { signal: wakeController.signal });
       } finally {
-        clearTimeout(timer);
+        clearTimeout(wakeTimer);
       }
-    };
+    } catch {
+      // Ignore — even if health check fails or times out, try login anyway
+    }
 
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    // Step 2: Login with a short timeout (backend should be awake now)
+    setAdminLoginError('Giriş yapılıyor...');
+    for (let attempt = 1; attempt <= MAX_LOGIN_RETRIES; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), LOGIN_TIMEOUT);
       try {
         const [fetchedOrders, fetchedDesigns] = await Promise.all([
-          fetchWithTimeout(() => getAdminOrdersFromCloud(adminKeyInput)),
-          fetchWithTimeout(() => getAdminDesignsFromCloud(adminKeyInput)),
+          getAdminOrdersFromCloud(adminKeyInput, undefined, controller.signal),
+          getAdminDesignsFromCloud(adminKeyInput, undefined, controller.signal),
         ]);
+        clearTimeout(timer);
         sessionStorage.setItem('gang-sheet-admin-key', adminKeyInput);
-        setAdminOrders(fetchedOrders as Order[]);
-        setAdminDesigns(fetchedDesigns as GangSheetDesign[]);
+        setAdminOrders(fetchedOrders);
+        setAdminDesigns(fetchedDesigns);
         setAdminMode(true);
         setAdminKeyInput('');
         setAdminLoading(false);
+        setAdminLoginError('');
         return;
       } catch (err) {
+        clearTimeout(timer);
         const msg = err instanceof Error ? err.message : String(err);
-        const isAbort = err instanceof Error && err.name === 'AbortError';
-        const isNetwork = isAbort || msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.toLowerCase().includes('fetch');
-
-        if (!isNetwork || attempt === MAX_RETRIES) {
-          if (msg === 'Unauthorized') {
-            setAdminLoginError('Geçersiz admin şifresi. Tekrar deneyin.');
-          } else if (isNetwork) {
-            setAdminLoginError('Backend\'e ulaşılamıyor. Render.com dashboard\'dan manuel olarak uyandır ve tekrar dene.');
-          } else {
-            setAdminLoginError(`Hata: ${msg}`);
-          }
+        if (msg === 'Unauthorized') {
+          setAdminLoginError('Geçersiz admin şifresi. Tekrar deneyin.');
           setAdminLoading(false);
           return;
         }
-
-        setAdminLoginError(`Sunucu uyanıyor, bekleniyor... (${attempt}/${MAX_RETRIES})`);
-        await new Promise(res => setTimeout(res, RETRY_DELAY));
+        if (attempt === MAX_LOGIN_RETRIES) {
+          setAdminLoginError('Backend\'e ulaşılamıyor. Render.com\'dan manuel uyandır ve tekrar dene.');
+          setAdminLoading(false);
+          return;
+        }
+        setAdminLoginError(`Bağlantı hatası, tekrar deneniyor... (${attempt}/${MAX_LOGIN_RETRIES})`);
+        await new Promise(res => setTimeout(res, 2000));
       }
     }
   };

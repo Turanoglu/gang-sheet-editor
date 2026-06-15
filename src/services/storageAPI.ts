@@ -359,20 +359,20 @@ export async function getImageDownloadUrl(key: string): Promise<string> {
 
 // ==================== ADMIN API ====================
 
-export async function getAdminOrdersFromCloud(adminKey: string, shopDomain?: string): Promise<Order[]> {
+export async function getAdminOrdersFromCloud(adminKey: string, shopDomain?: string, signal?: AbortSignal): Promise<Order[]> {
   const headers: Record<string, string> = { 'X-Admin-Key': adminKey };
   if (shopDomain) headers['X-Shop-Domain'] = shopDomain;
-  const response = await fetch(`${API_BASE_URL}/api/storage/admin/orders`, { headers });
+  const response = await fetch(`${API_BASE_URL}/api/storage/admin/orders`, { headers, signal });
   if (response.status === 401) throw new Error('Unauthorized');
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
   return data.orders || [];
 }
 
-export async function getAdminDesignsFromCloud(adminKey: string, shopDomain?: string): Promise<GangSheetDesign[]> {
+export async function getAdminDesignsFromCloud(adminKey: string, shopDomain?: string, signal?: AbortSignal): Promise<GangSheetDesign[]> {
   const headers: Record<string, string> = { 'X-Admin-Key': adminKey };
   if (shopDomain) headers['X-Shop-Domain'] = shopDomain;
-  const response = await fetch(`${API_BASE_URL}/api/storage/admin/designs`, { headers });
+  const response = await fetch(`${API_BASE_URL}/api/storage/admin/designs`, { headers, signal });
   if (response.status === 401) throw new Error('Unauthorized');
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
