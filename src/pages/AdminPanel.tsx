@@ -534,42 +534,14 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
   const handleAdminLogin = async () => {
     if (!adminKeyInput.trim()) return;
     setAdminLoading(true);
-    setAdminLoginError('');
+    setAdminLoginError('Bağlanılıyor, lütfen bekleyin...');
 
-    const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
-    const MAX_WAKE_MS = 90000;   // max 90s total wake-up wait
-    const PING_TIMEOUT = 6000;   // each ping aborts after 6s
-    const PING_INTERVAL = 1000;  // 1s gap between pings
-
-    // Step 1: Ping /health every few seconds until it responds (or timeout)
-    const wakeStart = Date.now();
-    let serverAwake = false;
-    let pingCount = 0;
-
-    while (!serverAwake && Date.now() - wakeStart < MAX_WAKE_MS) {
-      pingCount++;
-      setAdminLoginError(`Sunucu uyanıyor... (${pingCount})`);
-      try {
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), PING_TIMEOUT);
-        const res = await fetch(`${API_BASE}/health`, { signal: ctrl.signal });
-        clearTimeout(t);
-        if (res.ok) { serverAwake = true; break; }
-      } catch { /* still waking, retry */ }
-      await new Promise(r => setTimeout(r, PING_INTERVAL));
-    }
-
-    if (!serverAwake) {
-      setAdminLoginError('Sunucuya ulaşılamıyor. Lütfen tekrar deneyin.');
-      setAdminLoading(false);
-      return;
-    }
-
-    // Step 2: Server is awake — login immediately
-    setAdminLoginError('Giriş yapılıyor...');
+    // Send login request directly with a long timeout.
+    // Render free tier queues the first request while waking up (~60s cold start),
+    // so a single 90s timeout is more reliable than a separate ping + login step.
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 90000);
     try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 30000);
       const [fetchedOrders, fetchedDesigns] = await Promise.all([
         getAdminOrdersFromCloud(adminKeyInput, undefined, ctrl.signal),
         getAdminDesignsFromCloud(adminKeyInput, undefined, ctrl.signal),
@@ -582,14 +554,15 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
       setAdminKeyInput('');
       setAdminLoginError('');
     } catch (err) {
+      clearTimeout(t);
       const msg = err instanceof Error ? err.message : String(err);
       const name = err instanceof Error ? err.name : '';
       if (msg === 'Unauthorized') {
         setAdminLoginError('Geçersiz admin şifresi. Tekrar deneyin.');
       } else if (name === 'AbortError') {
-        setAdminLoginError('Zaman aşımı. Sunucu yavaş cevap veriyor, tekrar deneyin.');
+        setAdminLoginError('Sunucu 90 saniyede cevap vermedi. Render.com\'dan kontrol edin.');
       } else {
-        setAdminLoginError(`Hata: ${msg}`);
+        setAdminLoginError(`Bağlantı hatası: ${msg}`);
       }
     } finally {
       setAdminLoading(false);
