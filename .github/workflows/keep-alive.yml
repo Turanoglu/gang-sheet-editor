@@ -2,8 +2,8 @@ name: Keep Backend Alive
 
 on:
   schedule:
-    # Every 14 minutes — Render free tier sleeps after 15 min inactivity
-    - cron: '*/14 * * * *'
+    # Every 8 minutes — Render free tier sleeps after ~10 min inactivity
+    - cron: '*/8 * * * *'
   workflow_dispatch: # allow manual trigger
 
 jobs:
