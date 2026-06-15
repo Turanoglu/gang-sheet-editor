@@ -2,20 +2,35 @@ name: Keep Backend Alive
 
 on:
   schedule:
-    # Every 8 minutes — Render free tier sleeps after ~10 min inactivity
-    - cron: '*/8 * * * *'
-  workflow_dispatch: # allow manual trigger
+    # Every 5 minutes — within each run we ping 3x with 4min gaps
+    # so even if GitHub delays the cron, backend never sleeps >10 min
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping backend health endpoint
+      - name: Ping 1
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            --max-time 90 \
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 \
             https://gang-sheet-backend.onrender.com/health) || true
-          echo "Backend responded with HTTP $STATUS"
-          if [ "$STATUS" != "200" ]; then
-            echo "Warning: backend returned $STATUS (may be waking up)"
-          fi
+          echo "Ping 1: HTTP $STATUS"
+
+      - name: Wait 4 minutes
+        run: sleep 240
+
+      - name: Ping 2
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 \
+            https://gang-sheet-backend.onrender.com/health) || true
+          echo "Ping 2: HTTP $STATUS"
+
+      - name: Wait 4 minutes
+        run: sleep 240
+
+      - name: Ping 3
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 \
+            https://gang-sheet-backend.onrender.com/health) || true
+          echo "Ping 3: HTTP $STATUS"
