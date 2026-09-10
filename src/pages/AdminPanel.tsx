@@ -18,12 +18,23 @@ import {
   getCustomerEmail,
   getCustomerId,
   getCustomerName,
+  getCustomerSig,
+  getCustomerTs,
   getShopDomain,
 } from '../services/storageAPI';
 
 const SHOPIFY_STORE_URL = import.meta.env.VITE_SHOPIFY_STORE_URL || 'https://gang-sheet-test1.myshopify.com/pages/gang-sheet';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://gang-sheet-backend.onrender.com';
 
-type TabType = 'All' | 'Draft' | 'In Cart' | 'Ordered' | 'Completed';
+type TabType = 'All' | 'In Cart' | 'Created' | 'Ordered' | 'Processing' | 'Completed' | 'Cancelled';
+const ORDER_TABS: TabType[] = ['All', 'In Cart', 'Created', 'Ordered', 'Processing', 'Completed', 'Cancelled'];
+
+// Statuses a customer is allowed to set on their own order from the "My Orders" panel.
+// Everything else (Ordered / Processing / Completed) is fulfillment state only an admin
+// or a Shopify webhook may set.
+const CUSTOMER_EDITABLE_STATUSES: OrderStatus[] = ['Draft', 'Created', 'In Cart', 'Cancelled'];
+// A customer may only delete an order that never became a real purchase.
+const CUSTOMER_DELETABLE_STATUSES: OrderStatus[] = ['Draft', 'Created', 'In Cart'];
 type SidebarView = 'Welcome' | 'Designs' | 'Orders' | 'EditorSettings' | 'AdminSettings';
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
@@ -179,6 +190,10 @@ const OrderViewModal: React.FC<{
     doc.setFont('helvetica', 'normal');
     doc.text(`Order: ${order.orderNumber}`, margin, y);
     y += 16;
+    if (order.shopifyOrderName) {
+      doc.text(`Shopify Order: ${order.shopifyOrderName}`, margin, y);
+      y += 16;
+    }
     doc.text(`Date: ${new Date(order.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, margin, y);
     y += 16;
     doc.text(`Customer: ${order.customerName}`, margin, y);
@@ -248,7 +263,11 @@ const OrderViewModal: React.FC<{
           <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-emerald-600 to-teal-600">
             <div>
               <h3 className="text-lg font-semibold text-white">Order {order.orderNumber}</h3>
-              <p className="text-emerald-100 text-sm">{order.customerName}</p>
+              <p className="text-emerald-100 text-sm">
+                {order.customerName}
+                {order.shopifyOrderName && <> · Shopify {order.shopifyOrderName}</>}
+                {order.financialStatus && <> · {order.financialStatus}</>}
+              </p>
             </div>
             <button 
               onClick={onClose}
@@ -461,8 +480,10 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
     loadFromCloud,
   } = useOrderStore();
 
-  // Enable cloud sync polling for admin panel
-  useCloudSync();
+  // Customer-mode: poll the customer's own orders/designs. Admin-mode polling is
+  // handled separately below (it fetches a different, store-independent dataset).
+  const [adminMode, setAdminMode] = useState(() => !!sessionStorage.getItem('gang-sheet-admin-key'));
+  useCloudSync(!adminMode);
 
   const [activeTab, setActiveTab] = useState<TabType>('All');
   const [searchQuery, setSearchQuery] = useState('');
@@ -470,10 +491,8 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
   const [currentPage, setCurrentPage] = useState(1);
   const [sidebarView, setSidebarView] = useState<SidebarView>('Welcome');
 
-  // Admin mode state — key is kept in sessionStorage only (tab-scoped, not persistent).
-  // Never stored in localStorage so it doesn't appear in DevTools Application → Local Storage.
-  const [adminMode, setAdminMode] = useState(() => !!sessionStorage.getItem('gang-sheet-admin-key'));
-
+  // Admin mode state (declared above with useCloudSync) — key is kept in sessionStorage
+  // only (tab-scoped, not persistent) so it never appears in localStorage / DevTools.
   const [adminKeyInput, setAdminKeyInput] = useState('');
   const [adminLoginError, setAdminLoginError] = useState('');
 
@@ -487,20 +506,27 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
   const orders = adminMode ? adminOrders : myOrders;
   const designs = adminMode ? adminDesigns : myDesigns;
 
-  // Build editor URL with customer context so the editor knows who the user is
+  // Build editor URL with customer context so the editor knows who the user is.
+  // Must carry `shop` (ShopifyAuthGate requires it) plus the signature/timestamp so a
+  // freshly opened tab still authenticates against the backend.
   const editorUrl = (() => {
     const cid = getCustomerId();
-    const params = new URLSearchParams({ customerId: cid });
+    const shopDomain = getShopDomain();
+    const shopSlug = shopDomain ? shopDomain.replace(/^www\./, '').split('.')[0] : 'inkdyno';
+    const params = new URLSearchParams({ customerId: cid, shop: shopSlug });
     const name = getCustomerName();
     const email = getCustomerEmail();
-    const shopDomain = getShopDomain();
+    const sig = getCustomerSig();
+    const ts = getCustomerTs();
     if (name) params.set('customerName', name);
     if (email) params.set('customerEmail', email);
     if (shopDomain) params.set('shopDomain', shopDomain);
+    if (sig) params.set('custSig', sig);
+    if (ts) params.set('custTs', ts);
     return `/?${params.toString()}`;
   })();
 
-  const loadAdminData = useCallback(async () => {
+  const loadAdminData = useCallback(async (fresh = false) => {
     if (!adminMode) {
       loadFromCloud();
       return;
@@ -511,8 +537,8 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
     try {
       const shopDomain = getShopDomain();
       const [fetchedOrders, fetchedDesigns] = await Promise.all([
-        getAdminOrdersFromCloud(key, shopDomain || undefined),
-        getAdminDesignsFromCloud(key, shopDomain || undefined),
+        getAdminOrdersFromCloud(key, shopDomain || undefined, undefined, fresh),
+        getAdminDesignsFromCloud(key, shopDomain || undefined, undefined, fresh),
       ]);
       setAdminOrders(fetchedOrders);
       setAdminDesigns(fetchedDesigns);
@@ -530,6 +556,22 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
   useEffect(() => {
     loadAdminData();
   }, [loadAdminData]);
+
+  // Admin-mode auto-refresh: re-fetch the all-customers dataset periodically and when
+  // the tab regains focus, mirroring what useCloudSync does for customer mode.
+  useEffect(() => {
+    if (!adminMode) return;
+    const REFRESH_MS = 60_000;
+    const tick = () => {
+      if (!document.hidden) loadAdminData();
+    };
+    const timer = window.setInterval(tick, REFRESH_MS);
+    window.addEventListener('focus', tick);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('focus', tick);
+    };
+  }, [adminMode, loadAdminData]);
 
   const handleAdminLogin = async () => {
     if (!adminKeyInput.trim()) return;
@@ -581,12 +623,34 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
     if (!key) return;
     if (!confirm('R2\'deki eski design dosyalarındaki büyük veriyi temizle? (Bir kez yapılması yeterli)')) return;
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'https://gang-sheet-backend.onrender.com'}/api/storage/admin/cleanup-designs`, {
+      const res = await fetch(`${BACKEND_URL}/api/storage/admin/cleanup-designs`, {
         method: 'POST',
         headers: { 'X-Admin-Key': key },
       });
       const data = await res.json();
       alert(`Temizlendi: ${data.cleaned} dosya, atlandı: ${data.skipped} (zaten temiz)`);
+    } catch (e) {
+      alert('Hata: ' + e);
+    }
+  };
+
+  const handleCleanupStaleOrders = async () => {
+    const key = sessionStorage.getItem('gang-sheet-admin-key');
+    if (!key) return;
+    const input = prompt('Kaç günden eski "In Cart" / "Created" siparişler iptal edilsin?', '14');
+    if (input == null) return;
+    const days = Number(input);
+    if (!Number.isFinite(days) || days < 1) { alert('Geçersiz gün sayısı'); return; }
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/storage/admin/cleanup-stale-orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': key, 'X-Shop-Domain': getShopDomain() },
+        body: JSON.stringify({ days }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      alert(`${data.cancelled} terk edilmiş sipariş iptal edildi (${data.scanned} tarandı).`);
+      loadAdminData(true);
     } catch (e) {
       alert('Hata: ' + e);
     }
@@ -655,7 +719,10 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
       result = result.filter(
         (order) =>
           order.orderNumber.toLowerCase().includes(query) ||
-          order.customerName.toLowerCase().includes(query)
+          order.customerName.toLowerCase().includes(query) ||
+          (order.customerEmail || '').toLowerCase().includes(query) ||
+          (order.shopifyOrderName || '').toLowerCase().includes(query) ||
+          String(order.shopifyOrderNumber || '').includes(query)
       );
     }
 
@@ -698,6 +765,7 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
         alert(`❌ Sipariş durumu güncellenemedi: ${e instanceof Error ? e.message : e}`);
       }
     } else {
+      if (!CUSTOMER_EDITABLE_STATUSES.includes(newStatus)) return;
       updateOrderStatus(orderId, newStatus);
     }
   };
@@ -898,6 +966,10 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
   };
 
   const handleDeleteOrder = async (order: Order) => {
+    if (!adminMode && !CUSTOMER_DELETABLE_STATUSES.includes(order.status)) {
+      alert('Verilmiş bir siparişi silemezsiniz. İptal için lütfen bizimle iletişime geçin.');
+      return;
+    }
     if (!confirm(`Are you sure you want to delete order ${order.orderNumber}?`)) return;
     if (adminMode && order.customerId) {
       const key = sessionStorage.getItem('gang-sheet-admin-key')!;
@@ -1145,6 +1217,17 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
                   R2 Cleanup (1x)
                 </button>
                 <button
+                  onClick={handleCleanupStaleOrders}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs
+                             text-orange-600 hover:bg-orange-50 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Terk edilmiş sipariş temizle
+                </button>
+                <button
                   onClick={handleAdminLogout}
                   className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs
                              text-red-600 hover:bg-red-50 transition-colors"
@@ -1200,7 +1283,7 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
                 </div>
               )}
               <button
-                onClick={() => loadAdminData()}
+                onClick={() => loadAdminData(true)}
                 disabled={isCloudSyncing || adminLoading}
                 className="mt-2 w-full text-xs text-blue-600 hover:text-blue-700 disabled:opacity-50"
               >
@@ -1268,7 +1351,7 @@ export const AdminPanel: React.FC<{ forceAdminAccess?: boolean }> = ({ forceAdmi
             <div className="p-4 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1">
-                  {(['All', 'Draft', 'In Cart', 'Ordered', 'Completed'] as TabType[]).map((tab) => (
+                  {ORDER_TABS.map((tab) => (
                     <button
                       key={tab}
                       onClick={() => { setActiveTab(tab); setCurrentPage(1); }}
@@ -1615,7 +1698,14 @@ const OrderRow: React.FC<{
         <span className="font-medium text-gray-800">{order.customerName}</span>
       </div>
     </td>
-    <td className="px-4 py-3 text-gray-700 font-mono text-sm">{order.orderNumber}</td>
+    <td className="px-4 py-3 font-mono text-sm">
+      <span className="text-gray-700 block">{order.orderNumber}</span>
+      {order.shopifyOrderName && (
+        <span className="text-xs text-emerald-600" title="Shopify order">
+          Shopify {order.shopifyOrderName}
+        </span>
+      )}
+    </td>
     <td className="px-4 py-3">
       <span className="text-gray-700 block">{order.customerName}</span>
       {order.customerEmail && (
@@ -1631,19 +1721,25 @@ const OrderRow: React.FC<{
       {order.items?.[0]?.design?.boardSize?.label || '-'}
     </td>
     <td className="px-4 py-3">
-      <select
-        value={order.status}
-        onChange={(e) => onStatusChange(order.id, e.target.value as OrderStatus)}
-        className={`px-2 py-1 rounded-full text-xs font-medium border-0 cursor-pointer ${STATUS_COLORS[order.status]}`}
-      >
-        <option value="Draft">Draft</option>
-        <option value="Created">Created</option>
-        <option value="In Cart">In Cart</option>
-        <option value="Ordered">Ordered</option>
-        <option value="Processing">Processing</option>
-        <option value="Completed">Completed</option>
-        <option value="Cancelled">Cancelled</option>
-      </select>
+      {adminMode ? (
+        <select
+          value={order.status}
+          onChange={(e) => onStatusChange(order.id, e.target.value as OrderStatus)}
+          className={`px-2 py-1 rounded-full text-xs font-medium border-0 cursor-pointer ${STATUS_COLORS[order.status]}`}
+        >
+          <option value="Draft">Draft</option>
+          <option value="Created">Created</option>
+          <option value="In Cart">In Cart</option>
+          <option value="Ordered">Ordered</option>
+          <option value="Processing">Processing</option>
+          <option value="Completed">Completed</option>
+          <option value="Cancelled">Cancelled</option>
+        </select>
+      ) : (
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[order.status]}`}>
+          {order.status}
+        </span>
+      )}
     </td>
     <td className="px-4 py-3">
       <span className="text-blue-600">{order.product}</span>
@@ -1675,16 +1771,18 @@ const OrderRow: React.FC<{
                   d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
           </svg>
         </button>
-        <button 
-          onClick={onDelete} 
-          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" 
-          title="Delete Order"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
+        {(adminMode || CUSTOMER_DELETABLE_STATUSES.includes(order.status)) && (
+          <button
+            onClick={onDelete}
+            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+            title="Delete Order"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        )}
       </div>
     </td>
   </tr>

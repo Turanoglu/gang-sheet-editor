@@ -43,6 +43,15 @@ export interface Order {
   notes?: string;
   product: string;
   customerId?: string; // Attached by admin endpoints
+  // Real Shopify order identifiers — written by the orders/paid webhook once the
+  // checkout that contains this order's line item is paid. Let admins cross-reference
+  // an R2 order with the actual order in Shopify Admin.
+  shopifyOrderId?: number;
+  shopifyOrderName?: string;   // e.g. "#1001"
+  shopifyOrderNumber?: number; // e.g. 1001
+  financialStatus?: string;    // paid | partially_refunded | refunded | voided ...
+  paidAt?: string;
+  cancelledAt?: string;
 }
 
 // Price calculation based on board size
@@ -98,7 +107,12 @@ export interface OrderActions {
   setCurrentDesign: (design: GangSheetDesign | null) => void;
   
   // Orders
-  createOrder: (customerName: string, cartItems: CartItem[], initialStatus?: OrderStatus) => Order;
+  createOrder: (
+    customerName: string,
+    cartItems: CartItem[],
+    initialStatus?: OrderStatus,
+    customerEmail?: string,
+  ) => Order;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   deleteOrder: (orderId: string) => void;
   getOrdersByStatus: (status: OrderStatus) => Order[];

@@ -1,4 +1,17 @@
 {% layout none %}
+{%- comment -%}
+  Signs the logged-in customer's ID so the backend can trust it. Liquid runs
+  server-side inside Shopify's trusted context, so this secret never reaches the
+  browser — only the resulting hex signature is sent to the iframe. The backend
+  (SESSION_SIGNING_SECRET) must hold the exact same value, or every signature check
+  will fail and customers will be treated as logged-out guests.
+{%- endcomment -%}
+{%- assign session_secret = "546a530e648cf258d5dfa649f64519816a78cfdf9b2b5cda06b41f6e43536e9f" -%}
+{%- assign cust_ts = 'now' | date: '%s' -%}
+{%- if customer -%}
+  {%- assign cust_sig_payload = customer.id | append: ':' | append: cust_ts -%}
+  {%- assign cust_sig = cust_sig_payload | hmac_sha256: session_secret -%}
+{%- endif -%}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -28,7 +41,7 @@
 
   <iframe
     id="gang-sheet-wrapper"
-    src="https://gang-sheet-editor.vercel.app/?{% if customer %}customerId={{ customer.id }}&customerEmail={{ customer.email | url_encode }}&customerName={{ customer.first_name | append: ' ' | append: customer.last_name | strip | url_encode }}&shopDomain={{ shop.permanent_domain | url_encode }}&{% endif %}shop=inkdyno"
+    src="https://gang-sheet-editor.vercel.app/?{% if customer %}customerId={{ customer.id }}&custTs={{ cust_ts }}&custSig={{ cust_sig }}&customerEmail={{ customer.email | url_encode }}&customerName={{ customer.first_name | append: ' ' | append: customer.last_name | strip | url_encode }}&shopDomain={{ shop.permanent_domain | url_encode }}&{% endif %}shop=inkdyno"
     allow="clipboard-read; clipboard-write"
   ></iframe>
 
@@ -39,6 +52,8 @@
       iframe.contentWindow.postMessage({
         type: 'SHOPIFY_CUSTOMER',
         customerId: '{{ customer.id }}',
+        customerTs: '{{ cust_ts }}',
+        customerSig: '{{ cust_sig }}',
         customerEmail: '{{ customer.email }}',
         customerName: '{{ customer.first_name }} {{ customer.last_name }}',
         shopDomain: '{{ shop.permanent_domain }}'

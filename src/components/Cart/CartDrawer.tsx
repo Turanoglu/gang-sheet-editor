@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useCartStore } from '../../store/cartStore';
 import { useOrderStore } from '../../store/orderStore';
 import { getVariantId, areVariantsConfigured } from '../../config/shopifyVariants';
-import { getCustomerName } from '../../services/storageAPI';
+import { getCustomerName, getCustomerEmail, getCustomerId } from '../../services/storageAPI';
 
 // Detect if the editor is embedded inside an iframe (e.g. inkdyno.com)
 const isEmbedded = (): boolean => {
@@ -50,14 +50,22 @@ export const CartDrawer: React.FC = () => {
     };
 
     try {
-      // C3: update/create orders per item with individual error handling
+      // C3: resolve one R2 order per cart item (reuse the order created in the editor
+      // when present, otherwise create it now), remembering the id so we can stamp it
+      // onto the matching Shopify line item below.
       const customerName = getCustomerName() || 'Customer';
+      const customerEmail = getCustomerEmail() || undefined;
+      const customerId = getCustomerId();
+      const orderIdByItemId = new Map<string, string>();
+
       for (const item of items) {
         try {
           if (item.orderId) {
             updateOrderStatus(item.orderId, 'Created');
+            orderIdByItemId.set(item.id, item.orderId);
           } else {
-            createOrder(customerName, [item], 'Created');
+            const created = createOrder(customerName, [item], 'Created', customerEmail);
+            orderIdByItemId.set(item.id, created.id);
           }
         } catch (orderErr) {
           console.error('[GS] Order status update failed for item:', item.id, orderErr);
@@ -76,6 +84,7 @@ export const CartDrawer: React.FC = () => {
               `Please update src/config/shopifyVariants.ts.`
             );
           }
+          const gsOrderId = orderIdByItemId.get(item.id);
           return {
             variantId,
             quantity: item.quantity,
@@ -83,6 +92,12 @@ export const CartDrawer: React.FC = () => {
               'Design Name': item.design.name,
               'Board Size': item.design.boardSize.label,
               'Images Count': String(item.design.imageCount),
+              // Hidden reconciliation keys (leading "_" hides them from the storefront,
+              // cart, emails and packing slips). The orders/paid webhook reads these to
+              // update the exact R2 order/design instead of guessing.
+              ...(gsOrderId ? { _gsOrderId: gsOrderId } : {}),
+              _gsCustomerId: customerId,
+              _gsDesignId: item.design.id,
             },
           };
         });

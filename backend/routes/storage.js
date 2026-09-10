@@ -1,6 +1,8 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const { sendStatusEmail } = require('./email');
+const { adminRateLimit } = require('../lib/rateLimit');
 const {
   S3Client,
   PutObjectCommand,
@@ -27,18 +29,59 @@ const BUCKET_NAME = process.env.R2_BUCKET_NAME;
 // Shopify customer IDs are numeric strings. We validate format to prevent path traversal
 // (e.g. "../../admin") — a numeric-only ID cannot escape the users/ prefix in R2 keys.
 const VALID_CUSTOMER_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
+// The Liquid template (rendered server-side by Shopify, a trusted context) signs
+// `${customerId}:${ts}` with this shared secret and passes the signature to the iframe.
+// Without a valid signature we never trust a client-claimed *numeric* (Shopify-shaped)
+// customer ID — that's what closes the cross-customer IDOR (any visitor could otherwise
+// just send someone else's numeric customer ID and read/edit/delete their data).
+// 30 days. The signature is minted server-side by Shopify's Liquid template on every
+// page load, so a returning customer refreshes it constantly; the only case a longer
+// window helps is a tab/link opened days later (e.g. the "My Orders" panel) — a 24h
+// window there silently dropped the customer to "anonymous" and showed an empty list.
+const CUSTOMER_SIG_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
+const verifyCustomerSignature = (customerId, ts, sig) => {
+  const secret = process.env.SESSION_SIGNING_SECRET;
+  if (!secret || !customerId || !ts || !sig) return false;
+  const tsNum = Number(ts);
+  if (!Number.isFinite(tsNum)) return false;
+  const ageSeconds = Math.floor(Date.now() / 1000) - tsNum;
+  if (ageSeconds < -60 || ageSeconds > CUSTOMER_SIG_MAX_AGE_SECONDS) return false; // small clock-skew allowance
+
+  const expectedHex = crypto.createHmac('sha256', secret).update(`${customerId}:${ts}`).digest('hex');
+  const expected = Buffer.from(expectedHex, 'hex');
+  let got;
+  try { got = Buffer.from(String(sig), 'hex'); } catch { return false; }
+  if (expected.length !== got.length) return false;
+  return crypto.timingSafeEqual(expected, got);
+};
+
+// Resolves who is actually calling us:
+//  1. A verified admin (X-Admin-Key) may act on behalf of any customer — same trust
+//     level already used by the /admin/* routes (e.g. "Edit in Builder" for a customer).
+//  2. A Shopify customer ID is only trusted when it carries a valid HMAC signature.
+//  3. Otherwise, a non-numeric, self-issued guest session ID is allowed (bearer-secret
+//     model — the same trust level as an anonymous cart cookie). A numeric ID without a
+//     valid signature is NEVER trusted, since that's exactly what a real customer ID looks like.
 const getCustomerId = (req) => {
-  const raw = req.headers['x-shopify-customer-id'] ||
-              req.query.customerId ||
-              req.body?.customerId ||
-              'anonymous';
-  const id = String(raw).trim();
-  // Reject IDs that look like path traversal or are too long
-  if (!VALID_CUSTOMER_ID_RE.test(id)) {
-    console.warn('[storage] Rejected invalid customer ID:', JSON.stringify(id).slice(0, 80));
-    return 'anonymous';
+  const raw = req.headers['x-shopify-customer-id'] || req.query.customerId || req.body?.customerId || '';
+  const claimed = String(raw).trim();
+
+  const adminKey = req.headers['x-admin-key'];
+  if (adminKey && process.env.ADMIN_SECRET_KEY && adminKey === process.env.ADMIN_SECRET_KEY) {
+    if (claimed && VALID_CUSTOMER_ID_RE.test(claimed)) return claimed;
   }
-  return id;
+
+  if (claimed && VALID_CUSTOMER_ID_RE.test(claimed)) {
+    const sig = req.headers['x-customer-sig'];
+    const ts = req.headers['x-customer-ts'];
+    if (verifyCustomerSignature(claimed, ts, sig)) return claimed;
+    if (!/^\d+$/.test(claimed)) return claimed; // opaque guest session id — not Shopify-shaped
+    console.warn('[storage] Rejected unsigned numeric customer ID:', JSON.stringify(claimed).slice(0, 80));
+  }
+
+  return 'anonymous';
 };
 
 // Helper: Get shop domain from request
@@ -59,17 +102,18 @@ const itemBelongsToShop = (item, requestedShopDomain) => {
   return itemDomain === requestedShopDomain;
 };
 
-// Admin auth middleware
-const requireAdminKey = (req, res, next) => {
+// Admin auth middleware — rate-limited to slow down brute-forcing ADMIN_SECRET_KEY
+const requireAdminKey = [adminRateLimit, (req, res, next) => {
   const adminKey = req.headers['x-admin-key'];
   if (!process.env.ADMIN_SECRET_KEY) {
     return res.status(500).json({ error: 'Admin key not configured on server' });
   }
   if (!adminKey || adminKey !== process.env.ADMIN_SECRET_KEY) {
+    req._rateLimitRecord?.();
     return res.status(401).json({ error: 'Unauthorized' });
   }
   next();
-};
+}];
 
 // Helper: Convert stream to string
 const streamToString = async (stream) => {
@@ -78,6 +122,77 @@ const streamToString = async (stream) => {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks).toString('utf-8');
+};
+
+// Helper: list ALL objects under a prefix, following pagination.
+// A bare ListObjectsV2Command page tops out at 1000 keys (or a lower MaxKeys); once the
+// store accumulates more orders+designs than that, older/newer items would silently
+// disappear from admin listings. This walks every page via ContinuationToken instead.
+const listAllObjects = async (prefix) => {
+  const all = [];
+  let ContinuationToken;
+  do {
+    const page = await s3Client.send(new ListObjectsV2Command({
+      Bucket: BUCKET_NAME,
+      Prefix: prefix,
+      ContinuationToken,
+    }));
+    all.push(...(page.Contents || []));
+    ContinuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (ContinuationToken);
+  return all;
+};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Admin list cache — /admin/orders and /admin/designs each walk the whole bucket
+// and GET every JSON object. With the auto-refresh poll every 60s plus manual
+// "Yenile" clicks that is a lot of R2 Class-B traffic for data that barely changes.
+// A short TTL cache absorbs the repeats; any admin write invalidates it immediately.
+// ──────────────────────────────────────────────────────────────────────────────
+const ADMIN_CACHE_TTL_MS = 30_000;
+const adminCache = new Map(); // key -> { ts, data }
+
+const getAdminCache = (key) => {
+  const hit = adminCache.get(key);
+  if (hit && Date.now() - hit.ts < ADMIN_CACHE_TTL_MS) return hit.data;
+  adminCache.delete(key);
+  return null;
+};
+const setAdminCache = (key, data) => adminCache.set(key, { ts: Date.now(), data });
+const invalidateAdminCache = () => adminCache.clear();
+
+// Any successful write through this router (customer or admin) drops the admin list
+// cache so the next /admin/orders or /admin/designs read reflects it immediately.
+router.use((req, res, next) => {
+  if (req.method === 'GET') return next();
+  res.on('finish', () => {
+    if (res.statusCode >= 200 && res.statusCode < 300) invalidateAdminCache();
+  });
+  next();
+});
+
+// Re-sign the thumbnail URL for each item in an order. Presigned URLs stored inside
+// the order JSON expire (24h), so without this every order preview in the customer
+// and admin panels breaks a day after checkout. `ownerCustomerId` is the customer the
+// order belongs to (used when an item's design has no customerId of its own).
+const refreshOrderItemThumbnails = async (order, ownerCustomerId) => {
+  if (!order || !Array.isArray(order.items)) return order;
+  await Promise.all(order.items.map(async (item) => {
+    const designId = item?.design?.id;
+    if (!designId) return;
+    const cid = item.design.customerId || ownerCustomerId;
+    if (!cid) return;
+    const thumbKey = `exports/${cid}/${designId}/thumbnail.png`;
+    try {
+      await s3Client.send(new HeadObjectCommand({ Bucket: BUCKET_NAME, Key: thumbKey }));
+      item.design.thumbnailUrl = await getSignedUrl(
+        s3Client,
+        new GetObjectCommand({ Bucket: BUCKET_NAME, Key: thumbKey }),
+        { expiresIn: 86400 }
+      );
+    } catch { /* no thumbnail in R2 — leave whatever the JSON had */ }
+  }));
+  return order;
 };
 
 // ==================== DESIGNS ====================
@@ -118,18 +233,15 @@ router.get('/designs', async (req, res) => {
     const customerId = getCustomerId(req);
     const prefix = `users/${customerId}/designs/`;
 
-    const listResponse = await s3Client.send(new ListObjectsV2Command({
-      Bucket: BUCKET_NAME,
-      Prefix: prefix,
-    }));
+    const objects = await listAllObjects(prefix);
 
-    if (!listResponse.Contents || listResponse.Contents.length === 0) {
+    if (objects.length === 0) {
       return res.json({ designs: [] });
     }
 
     // Fetch each design and refresh thumbnail URL
     const designs = await Promise.all(
-      listResponse.Contents.map(async (obj) => {
+      objects.map(async (obj) => {
         try {
           const getResponse = await s3Client.send(new GetObjectCommand({
             Bucket: BUCKET_NAME,
@@ -305,24 +417,22 @@ router.get('/orders', async (req, res) => {
     const customerId = getCustomerId(req);
     const prefix = `users/${customerId}/orders/`;
 
-    const listResponse = await s3Client.send(new ListObjectsV2Command({
-      Bucket: BUCKET_NAME,
-      Prefix: prefix,
-    }));
+    const objects = await listAllObjects(prefix);
 
-    if (!listResponse.Contents || listResponse.Contents.length === 0) {
+    if (objects.length === 0) {
       return res.json({ orders: [] });
     }
 
     const orders = await Promise.all(
-      listResponse.Contents.map(async (obj) => {
+      objects.map(async (obj) => {
         try {
           const getResponse = await s3Client.send(new GetObjectCommand({
             Bucket: BUCKET_NAME,
             Key: obj.Key,
           }));
           const bodyContents = await streamToString(getResponse.Body);
-          return JSON.parse(bodyContents);
+          const order = JSON.parse(bodyContents);
+          return await refreshOrderItemThumbnails(order, customerId);
         } catch (err) {
           console.error(`Error reading order ${obj.Key}:`, err);
           return null;
@@ -337,12 +447,25 @@ router.get('/orders', async (req, res) => {
   }
 });
 
+// Statuses a customer may set on their own order. Fulfillment states (Ordered /
+// Processing / Completed) are set only by an admin or a Shopify webhook.
+const CUSTOMER_SETTABLE_STATUSES = ['Draft', 'Created', 'In Cart', 'Cancelled'];
+
 // Update order status
 router.patch('/orders/:orderId/status', async (req, res) => {
   try {
     const customerId = getCustomerId(req);
     const { orderId } = req.params;
     const { status } = req.body;
+
+    const isAdmin = req.headers['x-admin-key'] &&
+      process.env.ADMIN_SECRET_KEY &&
+      req.headers['x-admin-key'] === process.env.ADMIN_SECRET_KEY;
+
+    if (!isAdmin && !CUSTOMER_SETTABLE_STATUSES.includes(status)) {
+      return res.status(403).json({ error: `Customers cannot set status "${status}"` });
+    }
+
     const key = `users/${customerId}/orders/${orderId}.json`;
 
     // Get existing order
@@ -352,6 +475,11 @@ router.patch('/orders/:orderId/status', async (req, res) => {
     }));
     const bodyContents = await streamToString(getResponse.Body);
     const order = JSON.parse(bodyContents);
+
+    // A customer may not move an order that has already progressed to fulfillment.
+    if (!isAdmin && !CUSTOMER_SETTABLE_STATUSES.includes(order.status)) {
+      return res.status(403).json({ error: 'This order can no longer be changed. Contact support.' });
+    }
 
     // Update status
     order.status = status;
@@ -372,12 +500,33 @@ router.patch('/orders/:orderId/status', async (req, res) => {
   }
 });
 
-// Delete an order
+// Delete an order (customer). Only orders that never became a real purchase may be
+// removed by the customer — anything from Ordered onward is kept for the record.
+const CUSTOMER_DELETABLE_STATUSES = ['Draft', 'Created', 'In Cart'];
+
 router.delete('/orders/:orderId', async (req, res) => {
   try {
     const customerId = getCustomerId(req);
     const { orderId } = req.params;
     const key = `users/${customerId}/orders/${orderId}.json`;
+
+    const isAdmin = req.headers['x-admin-key'] &&
+      process.env.ADMIN_SECRET_KEY &&
+      req.headers['x-admin-key'] === process.env.ADMIN_SECRET_KEY;
+
+    if (!isAdmin) {
+      try {
+        const existing = JSON.parse(await streamToString(
+          (await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: key }))).Body
+        ));
+        if (!CUSTOMER_DELETABLE_STATUSES.includes(existing.status)) {
+          return res.status(403).json({ error: 'A placed order cannot be deleted. Contact support to cancel.' });
+        }
+      } catch (e) {
+        if (e.name === 'NoSuchKey') return res.json({ success: true, orderId });
+        throw e;
+      }
+    }
 
     await s3Client.send(new DeleteObjectCommand({
       Bucket: BUCKET_NAME,
@@ -392,40 +541,6 @@ router.delete('/orders/:orderId', async (req, res) => {
 });
 
 // ==================== IMAGES / EXPORTS ====================
-
-// Get presigned URL for uploading an image
-router.post('/upload-url', async (req, res) => {
-  try {
-    const customerId = getCustomerId(req);
-    const { designId, fileType, imageType } = req.body;
-
-    if (!designId || !fileType) {
-      return res.status(400).json({ error: 'designId and fileType are required' });
-    }
-
-    // imageType: 'thumbnail' or 'full-export'
-    const extension = fileType.split('/')[1] || 'png';
-    const filename = imageType === 'thumbnail' ? 'thumbnail' : 'full-export';
-    const key = `exports/${customerId}/${designId}/${filename}.${extension}`;
-
-    const command = new PutObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: key,
-      ContentType: fileType,
-    });
-
-    const uploadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-
-    res.json({
-      uploadUrl,
-      key,
-      publicUrl: `https://${BUCKET_NAME}.${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${key}`
-    });
-  } catch (error) {
-    console.error('Error generating upload URL:', error);
-    res.status(500).json({ error: 'Failed to generate upload URL', message: error.message });
-  }
-});
 
 // Proxy an R2 object to frontend (avoids CORS issues with presigned URLs)
 router.get('/proxy-image', requireAdminKey, async (req, res) => {
@@ -455,29 +570,6 @@ router.get('/proxy-image', requireAdminKey, async (req, res) => {
   } catch (error) {
     console.error('Error proxying image:', error);
     res.status(500).json({ error: 'Failed to proxy image', message: error.message });
-  }
-});
-
-// Get presigned URL for downloading/viewing an image
-router.get('/download-url', async (req, res) => {
-  try {
-    const { key } = req.query;
-
-    if (!key) {
-      return res.status(400).json({ error: 'key is required' });
-    }
-
-    const command = new GetObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: key,
-    });
-
-    const downloadUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
-
-    res.json({ downloadUrl });
-  } catch (error) {
-    console.error('Error generating download URL:', error);
-    res.status(500).json({ error: 'Failed to generate download URL', message: error.message });
   }
 });
 
@@ -554,14 +646,14 @@ const stripHeavyFields = (obj) => {
 router.get('/admin/orders', requireAdminKey, async (req, res) => {
   try {
     const shopDomain = getShopDomain(req);
-    const listResponse = await s3Client.send(new ListObjectsV2Command({
-      Bucket: BUCKET_NAME,
-      Prefix: 'users/',
-      MaxKeys: 2000,
-    }));
+    const cacheKey = `orders:${shopDomain || '*'}`;
+    if (!req.query.fresh) {
+      const cached = getAdminCache(cacheKey);
+      if (cached) return res.json({ success: true, orders: cached, cached: true });
+    }
+    const objects = await listAllObjects('users/');
 
-    const orderKeys = (listResponse.Contents || [])
-      .filter(obj => obj.Key.includes('/orders/') && obj.Key.endsWith('.json'));
+    const orderKeys = objects.filter(obj => obj.Key.includes('/orders/') && obj.Key.endsWith('.json'));
 
     const orders = [];
     for (const obj of orderKeys) {
@@ -574,13 +666,17 @@ router.get('/admin/orders', requireAdminKey, async (req, res) => {
         const parsed = stripHeavyFields(JSON.parse(body));
         const parts = obj.Key.split('/');
         parsed.customerId = parts[1];
-        if (itemBelongsToShop(parsed, shopDomain)) orders.push(parsed);
+        if (itemBelongsToShop(parsed, shopDomain)) {
+          await refreshOrderItemThumbnails(parsed, parsed.customerId);
+          orders.push(parsed);
+        }
       } catch (e) {
         console.error('Error reading order:', obj.Key, e.message);
       }
     }
 
     orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    setAdminCache(cacheKey, orders);
     res.json({ success: true, orders });
   } catch (error) {
     console.error('Error fetching all orders:', error);
@@ -592,14 +688,14 @@ router.get('/admin/orders', requireAdminKey, async (req, res) => {
 router.get('/admin/designs', requireAdminKey, async (req, res) => {
   try {
     const shopDomain = getShopDomain(req);
-    const listResponse = await s3Client.send(new ListObjectsV2Command({
-      Bucket: BUCKET_NAME,
-      Prefix: 'users/',
-      MaxKeys: 2000,
-    }));
+    const cacheKey = `designs:${shopDomain || '*'}`;
+    if (!req.query.fresh) {
+      const cached = getAdminCache(cacheKey);
+      if (cached) return res.json({ success: true, designs: cached, cached: true });
+    }
+    const objects = await listAllObjects('users/');
 
-    const designKeys = (listResponse.Contents || [])
-      .filter(obj => obj.Key.includes('/designs/') && obj.Key.endsWith('.json'));
+    const designKeys = objects.filter(obj => obj.Key.includes('/designs/') && obj.Key.endsWith('.json'));
 
     const designs = [];
     for (const obj of designKeys) {
@@ -643,6 +739,7 @@ router.get('/admin/designs', requireAdminKey, async (req, res) => {
     }
 
     designs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    setAdminCache(cacheKey, designs);
     res.json({ success: true, designs });
   } catch (error) {
     console.error('Error fetching all designs:', error);
@@ -753,20 +850,17 @@ router.delete('/admin/designs/:customerId/:designId', requireAdminKey, async (re
     const exportsPrefix = `exports/${customerId}/${designId}/`;
 
     // List all export/asset files for this design
-    const listResp = await s3Client.send(new ListObjectsV2Command({
-      Bucket: BUCKET_NAME,
-      Prefix: exportsPrefix,
-    }));
+    const exportObjects = await listAllObjects(exportsPrefix);
 
     // Delete all export/asset files
-    const deletePromises = (listResp.Contents || []).map((obj) =>
+    const deletePromises = exportObjects.map((obj) =>
       s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: obj.Key }))
     );
     // Delete design JSON
     deletePromises.push(s3Client.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: designKey })));
 
     await Promise.all(deletePromises);
-    res.json({ success: true, designId, deletedAssets: (listResp.Contents || []).length });
+    res.json({ success: true, designId, deletedAssets: exportObjects.length });
   } catch (error) {
     console.error('Error deleting design (admin):', error);
     res.status(500).json({ error: 'Failed to delete design', message: error.message });
@@ -776,14 +870,9 @@ router.delete('/admin/designs/:customerId/:designId', requireAdminKey, async (re
 // Admin: cleanup heavy fields from all existing design files in R2
 router.post('/admin/cleanup-designs', requireAdminKey, async (req, res) => {
   try {
-    const listResponse = await s3Client.send(new ListObjectsV2Command({
-      Bucket: BUCKET_NAME,
-      Prefix: 'users/',
-      MaxKeys: 2000,
-    }));
+    const objects = await listAllObjects('users/');
 
-    const designKeys = (listResponse.Contents || [])
-      .filter(obj => obj.Key.includes('/designs/') && obj.Key.endsWith('.json'));
+    const designKeys = objects.filter(obj => obj.Key.includes('/designs/') && obj.Key.endsWith('.json'));
 
     let cleaned = 0;
     let skipped = 0;
@@ -815,4 +904,54 @@ router.post('/admin/cleanup-designs', requireAdminKey, async (req, res) => {
   }
 });
 
+// Admin: sweep abandoned carts. Any order still sitting in "In Cart" / "Created"
+// (never paid) older than `days` (default 14) is moved to "Cancelled" so it stops
+// polluting the order list and the abandoned-cart metrics. Non-destructive — the
+// records stay, just re-labelled — and safe to run repeatedly.
+router.post('/admin/cleanup-stale-orders', requireAdminKey, async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(365, Number(req.body?.days) || 14));
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    const shopDomain = getShopDomain(req);
+
+    const objects = await listAllObjects('users/');
+    const orderKeys = objects.filter(o => o.Key.includes('/orders/') && o.Key.endsWith('.json'));
+
+    let cancelled = 0;
+    let scanned = 0;
+    for (const obj of orderKeys) {
+      try {
+        const order = JSON.parse(await streamToString(
+          (await s3Client.send(new GetObjectCommand({ Bucket: BUCKET_NAME, Key: obj.Key }))).Body
+        ));
+        scanned++;
+        if (!['In Cart', 'Created'].includes(order.status)) continue;
+        if (shopDomain && !itemBelongsToShop(order, shopDomain)) continue;
+        const createdMs = new Date(order.createdAt).getTime();
+        if (!Number.isFinite(createdMs) || createdMs > cutoff) continue;
+
+        order.status = 'Cancelled';
+        order.updatedAt = new Date().toISOString();
+        order.cancelledAt = new Date().toISOString();
+        order.notes = [order.notes, `Auto-cancelled: abandoned > ${days} days`].filter(Boolean).join(' | ');
+        await s3Client.send(new PutObjectCommand({
+          Bucket: BUCKET_NAME, Key: obj.Key,
+          Body: JSON.stringify(order), ContentType: 'application/json',
+        }));
+        cancelled++;
+      } catch (e) {
+        console.error('cleanup-stale-orders: failed for', obj.Key, e.message);
+      }
+    }
+
+    invalidateAdminCache();
+    res.json({ success: true, cancelled, scanned, days });
+  } catch (error) {
+    res.status(500).json({ error: 'Cleanup failed', message: error.message });
+  }
+});
+
 module.exports = router;
+// Let other routers (e.g. the Shopify webhook handler, which writes order JSON
+// directly) drop the admin list cache after they mutate storage.
+module.exports.invalidateAdminCache = invalidateAdminCache;
