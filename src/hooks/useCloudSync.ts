@@ -2,11 +2,12 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useOrderStore } from '../store/orderStore';
 import { useSettingsStore } from '../store/settingsStore';
 
-export function useCloudSync() {
+export function useCloudSync(enabled: boolean = true) {
   const intervalRef = useRef<number | null>(null);
   const { loadFromCloud, isCloudSyncing } = useOrderStore();
   const { admin } = useSettingsStore();
-  const { cloudSyncEnabled, syncIntervalMs } = admin;
+  const cloudSyncEnabled = admin.cloudSyncEnabled && enabled;
+  const { syncIntervalMs } = admin;
 
   // Store refs to avoid stale closures
   const syncingRef = useRef(isCloudSyncing);

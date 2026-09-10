@@ -13,7 +13,7 @@ import { useOrderStore } from '../store/orderStore';
 import type { GangSheetDesign } from '../types/order';
 import { getPriceForBoard } from '../types/order';
 import { generateCleanExport } from '../utils/export';
-import { getCustomerInitials, getCustomerId, getCustomerName } from '../services/storageAPI';
+import { getCustomerInitials, getCustomerId, getCustomerName, getCustomerEmail } from '../services/storageAPI';
 
 export const EditorPage: React.FC = () => {
   const stageRef = useRef<Konva.Stage | null>(null);
@@ -374,6 +374,7 @@ export const EditorPage: React.FC = () => {
     if (!proofDesigns) return;
     const now = new Date();
     const customerName = getCustomerName() || 'Customer';
+    const customerEmail = getCustomerEmail() || undefined;
     const orderCartItems = proofDesigns.map((design) => ({
       id: '',
       designId: design.id,
@@ -382,7 +383,7 @@ export const EditorPage: React.FC = () => {
       pricePerUnit: getPriceForBoard(design.boardSize.width, design.boardSize.height),
       addedAt: now,
     }));
-    const order = createOrder(customerName, orderCartItems, 'In Cart');
+    const order = createOrder(customerName, orderCartItems, 'In Cart', customerEmail);
     clearCart();
     proofDesigns.forEach((design) => addToCart(design, quantity, order.id));
     setProofDesigns(null);

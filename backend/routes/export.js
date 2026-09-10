@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const sharp = require('sharp');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { adminRateLimit } = require('../lib/rateLimit');
 
 const s3Client = new S3Client({
   region: 'auto',
@@ -13,12 +14,15 @@ const s3Client = new S3Client({
 });
 const BUCKET_NAME = process.env.R2_BUCKET_NAME;
 
-const requireAdminKey = (req, res, next) => {
+const requireAdminKey = [adminRateLimit, (req, res, next) => {
   const key = req.headers['x-admin-key'];
   if (!process.env.ADMIN_SECRET_KEY) return res.status(500).json({ error: 'Admin key not configured' });
-  if (!key || key !== process.env.ADMIN_SECRET_KEY) return res.status(401).json({ error: 'Unauthorized' });
+  if (!key || key !== process.env.ADMIN_SECRET_KEY) {
+    req._rateLimitRecord?.();
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
   next();
-};
+}];
 
 const streamToBuffer = async (stream) => {
   const chunks = [];

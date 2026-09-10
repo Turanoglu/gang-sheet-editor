@@ -17,18 +17,25 @@ const allowedOrigins = [
   'http://localhost:3000',
   'https://gang-sheet-editor.vercel.app',
   'https://gang-sheet-test1.myshopify.com',
+  'https://www.inkdyno.com',
+  'https://inkdyno.com',
   process.env.FRONTEND_URL,
+  ...(process.env.EXTRA_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
 ].filter(Boolean);
 
+// The React app always calls this API from its own origin (gang-sheet-editor.vercel.app),
+// never from the Shopify storefront origin — the editor is loaded INTO an iframe on
+// inkdyno.com, but fetches from inside that iframe still carry the iframe's own origin.
+// So a blanket "any *.myshopify.com/*.shopify.com" allowance was unused in the real flow
+// and only widened who could make credentialed, cookie/header-bearing requests to the API.
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    // Allow any myshopify.com or shopify.com subdomain
-    if (origin.endsWith('.myshopify.com') || origin.endsWith('.shopify.com')) {
-      return callback(null, true);
-    }
     callback(new Error('CORS not allowed: ' + origin));
   },
   credentials: true

@@ -12,11 +12,13 @@ if (typeof window !== 'undefined') {
     ];
     if (!allowedOrigins.includes(event.origin)) return;
     if (event.data?.type !== 'SHOPIFY_CUSTOMER') return;
-    const { customerId, customerEmail, customerName } = event.data;
+    const { customerId, customerTs, customerSig, customerEmail, customerName } = event.data;
     if (customerId) {
       localStorage.setItem('gang-sheet-customer-id', String(customerId));
       (window as any).__SHOPIFY_CUSTOMER_ID__ = String(customerId);
     }
+    if (customerTs) localStorage.setItem('gang-sheet-customer-ts', String(customerTs));
+    if (customerSig) localStorage.setItem('gang-sheet-customer-sig', String(customerSig));
     if (customerEmail) {
       localStorage.setItem('gang-sheet-customer-email', customerEmail);
     }
@@ -44,6 +46,10 @@ export function getCustomerId(): string {
   if (customerIdParam) {
     // Persist to localStorage so it survives navigation (e.g. to /admin)
     localStorage.setItem('gang-sheet-customer-id', customerIdParam);
+    const tsParam = urlParams.get('custTs');
+    if (tsParam) localStorage.setItem('gang-sheet-customer-ts', tsParam);
+    const sigParam = urlParams.get('custSig');
+    if (sigParam) localStorage.setItem('gang-sheet-customer-sig', sigParam);
     const emailParam = urlParams.get('customerEmail');
     if (emailParam) localStorage.setItem('gang-sheet-customer-email', emailParam);
     const nameParam = urlParams.get('customerName');
@@ -57,13 +63,25 @@ export function getCustomerId(): string {
   const savedCustomerId = localStorage.getItem('gang-sheet-customer-id');
   if (savedCustomerId) return savedCustomerId;
 
-  // Fallback to anonymous session ID
+  // Fallback to an opaque guest session ID — must be unguessable since the backend
+  // trusts it as a bearer secret (no Shopify signature exists for a guest).
   let sessionId = localStorage.getItem('gang-sheet-session-id');
   if (!sessionId) {
-    sessionId = `anon-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    sessionId = crypto.randomUUID();
     localStorage.setItem('gang-sheet-session-id', sessionId);
   }
   return sessionId;
+}
+
+// The signature/timestamp Shopify's Liquid template computed for the current
+// customerId (empty for guests — the backend then treats the ID as an opaque
+// guest session, never as a trusted Shopify customer).
+export function getCustomerSig(): string {
+  try { return localStorage.getItem('gang-sheet-customer-sig') || ''; } catch { return ''; }
+}
+
+export function getCustomerTs(): string {
+  try { return localStorage.getItem('gang-sheet-customer-ts') || ''; } catch { return ''; }
 }
 
 export function getStoredCustomerId(): string {
@@ -131,12 +149,21 @@ export function isAuthenticated(): boolean {
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
   const customerId = getCustomerId();
   const shopDomain = getShopDomain();
+  const customerSig = getCustomerSig();
+  const customerTs = getCustomerTs();
+  // Present only when a real admin session is active (set by AdminPanel after a
+  // correct admin password) — lets admin actions like "Edit in Builder" act on
+  // behalf of another customer without needing that customer's Shopify signature.
+  const adminKey = sessionStorage.getItem('gang-sheet-admin-key');
   return fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
       'X-Shopify-Customer-Id': customerId,
+      ...(customerSig && { 'X-Customer-Sig': customerSig }),
+      ...(customerTs && { 'X-Customer-Ts': customerTs }),
       ...(shopDomain && { 'X-Shop-Domain': shopDomain }),
+      ...(adminKey && { 'X-Admin-Key': adminKey }),
       ...options.headers,
     },
   });
@@ -188,6 +215,11 @@ export async function getDesignFromCloud(designId: string, overrideCustomerId?: 
           headers: {
             'Content-Type': 'application/json',
             'X-Shopify-Customer-Id': overrideCustomerId,
+            // Only an authenticated admin can legitimately request someone else's
+            // design; without this the backend now refuses an unsigned override.
+            ...(sessionStorage.getItem('gang-sheet-admin-key') && {
+              'X-Admin-Key': sessionStorage.getItem('gang-sheet-admin-key')!,
+            }),
           },
         })
       : fetchWithAuth(url));
@@ -338,41 +370,29 @@ export async function uploadImageToCloud(
   }
 }
 
-export async function getImageDownloadUrl(key: string): Promise<string> {
-  try {
-    const response = await fetchWithAuth(
-      `${API_BASE_URL}/api/storage/download-url?key=${encodeURIComponent(key)}`
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.downloadUrl;
-  } catch (error) {
-    console.error('Failed to get image download URL:', error);
-    throw error;
-  }
-}
 
 // ==================== ADMIN API ====================
 
-export async function getAdminOrdersFromCloud(adminKey: string, shopDomain?: string, signal?: AbortSignal): Promise<Order[]> {
+export async function getAdminOrdersFromCloud(
+  adminKey: string, shopDomain?: string, signal?: AbortSignal, fresh = false,
+): Promise<Order[]> {
   const headers: Record<string, string> = { 'X-Admin-Key': adminKey };
   if (shopDomain) headers['X-Shop-Domain'] = shopDomain;
-  const response = await fetch(`${API_BASE_URL}/api/storage/admin/orders`, { headers, signal });
+  const response = await fetch(
+    `${API_BASE_URL}/api/storage/admin/orders${fresh ? '?fresh=1' : ''}`, { headers, signal });
   if (response.status === 401) throw new Error('Unauthorized');
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
   return data.orders || [];
 }
 
-export async function getAdminDesignsFromCloud(adminKey: string, shopDomain?: string, signal?: AbortSignal): Promise<GangSheetDesign[]> {
+export async function getAdminDesignsFromCloud(
+  adminKey: string, shopDomain?: string, signal?: AbortSignal, fresh = false,
+): Promise<GangSheetDesign[]> {
   const headers: Record<string, string> = { 'X-Admin-Key': adminKey };
   if (shopDomain) headers['X-Shop-Domain'] = shopDomain;
-  const response = await fetch(`${API_BASE_URL}/api/storage/admin/designs`, { headers, signal });
+  const response = await fetch(
+    `${API_BASE_URL}/api/storage/admin/designs${fresh ? '?fresh=1' : ''}`, { headers, signal });
   if (response.status === 401) throw new Error('Unauthorized');
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();

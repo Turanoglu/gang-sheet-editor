@@ -1,7 +1,7 @@
 import React from 'react';
 import { useEditorStore } from '../../store/editorStore';
 import { BOARD_SIZES } from '../../types';
-import { getCustomerId, getCustomerName, getCustomerEmail, getShopDomain } from '../../services/storageAPI';
+import { getCustomerId, getCustomerName, getCustomerEmail, getCustomerSig, getCustomerTs, getShopDomain } from '../../services/storageAPI';
 
 interface ToolbarProps {
   isPanMode?: boolean;
@@ -321,9 +321,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             const name = getCustomerName();
             const email = getCustomerEmail();
             const shopDomain = getShopDomain();
+            const sig = getCustomerSig();
+            const ts = getCustomerTs();
             if (name) params.set('customerName', name);
             if (email) params.set('customerEmail', email);
             if (shopDomain) params.set('shopDomain', shopDomain);
+            // Carry the Shopify signature so the freshly opened /admin tab authenticates
+            // even if it can't read the editor's localStorage.
+            if (sig) params.set('custSig', sig);
+            if (ts) params.set('custTs', ts);
             // Use absolute URL. Always use window.open — calling window.top.open()
             // throws a SecurityError in cross-origin iframes (Shopify ≠ vercel.app).
             const adminUrl = `${window.location.origin}/admin?${params.toString()}`;

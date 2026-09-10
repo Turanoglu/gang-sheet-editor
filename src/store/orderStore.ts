@@ -365,7 +365,12 @@ export const useOrderStore = create<ExtendedOrderStore>()(
       },
 
       // Orders
-      createOrder: (customerName: string, cartItems: CartItem[], initialStatus: OrderStatus = 'In Cart'): Order => {
+      createOrder: (
+        customerName: string,
+        cartItems: CartItem[],
+        initialStatus: OrderStatus = 'In Cart',
+        customerEmail?: string,
+      ): Order => {
         const totalAmount = cartItems.reduce(
           (total, item) => total + item.pricePerUnit * item.quantity,
           0
@@ -375,6 +380,7 @@ export const useOrderStore = create<ExtendedOrderStore>()(
           id: uuidv4(),
           orderNumber: generateOrderNumber(),
           customerName,
+          ...(customerEmail ? { customerEmail } : {}),
           items: cartItems,
           status: initialStatus,
           totalAmount,
